@@ -24,6 +24,11 @@ WRITE	MACRO
 	MOV	AH,09H
 	INT	21H
 	#EM
+WRITEC	MACRO
+	MOV	DL,#1
+	MOV	AH,02H
+	INT	21H
+	#EM
 READ	MACRO
 	LEA	DX,#1
 	MOV	AH,0AH
@@ -43,20 +48,25 @@ ANUM1	DB	4 DUP 0		; ASCII version of 1st number
 ANUM2	DB	4 DUP 0		; ASCII version of 2nd number
 BNUM1	DB	0		; Binary version of 1st number
 BNUM2	DB	0		; Binary version of 2nd number
-OP	DB	2 DUP 0		; operator
-RESULT	DB	0		; output
+OP	DB	0		; operator
+RESULT	DB	0		; Binary result
+ANSWER	DB	0		; ASCII result
 HEADER	DB	CR,LF,"**********  Cheap Calculator  **********",CR,LF,LF
 	DB	"Enter your equation: ",EOT
 ;
 ;	Testing Variables
 ;
-N1HDR	DB	CR,LF,"ANUM1: ",EOT
+AN1HDR	DB	CR,LF,"ANUM1: ",EOT
 OPHDR	DB	CR,LF,"   OP: ",EOT
-N2HDR:	DB	CR,LF,"ANUM2: ",EOT	
+AN2HDR	DB	CR,LF,"ANUM2: ",EOT	
+BN1HDR	DB	CR,LF,"BNUM1: ",EOT
+BN2HDR	DB	CR,LF,"BNUM2: ",EOT	
 ;
 START:
 	WRITE	HEADER		; write rules & prompt user for equation
 	READ	INBUF		; read input from user
+;
+; build 1st ASCII number
 	LEA	DI,INBUF+2	; point to the user's input
 	MOV	CL,0		; initialize character counter to 0
 EON1:	
@@ -78,16 +88,14 @@ BN1:	DEC	SI		; decrement NUM1 pointer
 	CMP	CL,0		; any more characters to add?
 	JNE	BN1		; add another digit
 ;
-; no more digits to add, save operator
-	LEA	SI,OP+1
-	MOV	B[SI],EOT
-	DEC	SI
+; no more digits to add; save operator
 	LEA	DI,BX		; reset input pointer to 1st SPACE in input
 	INC	DI		; increment INBUF pointer
 	MOV	AL,B[DI]	; save character as operator
-	MOV	B[SI],AL	;
-	INC	DI		; increment INBUF pointer 2x
-	INC	DI
+	MOV	OP,AL		;
+;
+; build 2nd ASCII number	
+	ADD	DI,2		; increment INBUF pointer 2x
 	MOV	CL,0		; reset character count to 0
 EON2:	
 	CMP	B[DI],CR	; @ CR?
@@ -110,14 +118,58 @@ BN2:	DEC	SI		; decrement NUM2 pointer
 ; no more digits to add
 	LEA	DI,BX		; reset input pointer to end of INBUF
 ;
-; output saved variables
-	WRITE	N1HDR
+; write values to screen
+	WRITE	AN1HDR
 	WRITE	ANUM1
 	WRITE	OPHDR
-	WRITE	OP
-	WRITE	N2HDR
+	WRITEC	OP
+	WRITE	AN2HDR
 	WRITE	ANUM2
-
-	EXIT
 ;
-	END
+; convert values to binary
+;	LEA	SI,ANUM1	; point to ANUM1
+;	CALL	A2B8		; convert ANUM1 to binary
+;	MOV	BNUM1,AL	; save result as BNUM1
+;	LEA	SI,ANUM2	; point to ANUM2
+;	CALL	A2B8		; convert ANUM2 to binary
+;	MOV	BNUM2,AL	; save result as BNUM2
+;
+; write values to screen
+;	WRITE	BNUM1
+;	WRITE	BNUM2
+;
+	EXIT			; clean exit
+;
+;*** Subroutine A2B8 ***************************************
+;
+;	A subroutine to convert a 3-digit ASCII value to
+;	its corresponding Binary value
+;
+;	Note: Does not perform error checking
+;
+;	ENTRY: SI points to value;
+;	       BX will be used to build binary number
+;	EXIT:  AL holds binary value
+;
+;A2B8:
+;	ADD	SI,2		; point to 1's byte
+;	SUB	B[SI],30H	; remove ASCII bias
+;	MOV	BH,B[SI]	; add 1's value to result
+;	DEC	SI		; decrement pointer to 10's byte
+;	MOV	BL,B[SI]	; get 10's byte
+;	SUB	BL,30H		; remove ASCII bias
+;	MOV	AL,10		; multiply by 10
+;	MUL	BL		;
+;	ADD	BH,AL		; add 10's value to result
+;	DEC	SI		; decrement pointer to 100's byte
+;	MOV	BL,B[SI]	; get 100's byte
+;	SUB	BL,30H		; remove ASCII bias
+;	MOV	AL,100		; multiply by 100
+;	MUL	BL		;
+;	ADD	BH,BL		; add 100's value to result
+;	MOV	AL,BH		; move result to output register
+;	RET			; return to caller
+;
+;***********************************************************
+;
+	END			; end of program
