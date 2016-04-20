@@ -15,6 +15,7 @@
 CR	EQU	0DH		; define carriage return
 LF	EQU	0AH		; define line feed
 EOT	EQU	'$'		; define end of text character
+SPACE	EQU	' '		; define space
 ;
 ;	Define macros
 ;
@@ -37,118 +38,86 @@ EXIT	MACRO
 ;
 ;	Define variables
 ;
-SPACE	DB	' ',EOT
 INBUF	DB	10,?,10 DUP ? 	; define input buffer
 ANUM1	DB	4 DUP 0		; ASCII version of 1st number
 ANUM2	DB	4 DUP 0		; ASCII version of 2nd number
 BNUM1	DB	0		; Binary version of 1st number
 BNUM2	DB	0		; Binary version of 2nd number
-OP	DB	0		; operator
-REAULT	DB	0		; output
+OP	DB	2 DUP 0		; operator
+RESULT	DB	0		; output
 HEADER	DB	CR,LF,"**********  Cheap Calculator  **********",CR,LF,LF
-	DB	
+	DB	"Enter your equation: ",EOT
+;
+;	Testing Variables
+;
+N1HDR	DB	CR,LF,"ANUM1: ",EOT
+OPHDR	DB	CR,LF,"   OP: ",EOT
+N2HDR:	DB	CR,LF,"ANUM2: ",EOT	
+;
 START:
 	WRITE	HEADER		; write rules & prompt user for equation
 	READ	INBUF		; read input from user
-	LEA	DI,INBUF	; point to the input buffer
+	LEA	DI,INBUF+2	; point to the user's input
 	MOV	CL,0		; initialize character counter to 0
-	
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-	MOV	CL,1		; initialize counter to 1
-	READ	INBUF		; get equation from the user
-	LEA	SI,INBUF	; point to beginning of the equation
-FINDN1:	
-	CMP	SI,SPACE	; compare if current byte is a space
-	JE	FOUNDIT		; if space, jump to getting number
-	INC 	CL		; increment character counter
-	INC	SI		; increment pointer to next character
-FOUNDIT:
-	MOV BX, SI		; save location of pointer
-	LEA DI, NUM1+2		; point to the last character space in NUM1
-F1:	
-	DEC	SI		; move input pointer to previous character
-	MOV 	AL,[SI]		; copy character from input (register) to memory
-	MOV	[DI],AL		; copy memory to register (actual value)
-	DEC 	DI		; move variable pointer down to next value
-	DEC 	CL		; decrement character counter
-	JNZ	F1		; if not 0, read in more characters
-	LEA	SI, BX		; reload pointer to data
-	WRITE	NUM1
-FINDOP:
-	INC SI			; increment pointer to find operator
-	CMP	SI, SPACE	; see if space
-	JE	FINDOP		; increment until we find not a space
-	MOV	OP, SI		; move byte to OP, should it be [SI]?
-	WRITE	OP		
-FINDN2:
-	INC SI			; increment pointer to find number
-	CMP SI, SPACE		; see if space
-	JE	FINDN2		; if equal, increment again
-	MOV	CL, 1		; reset character counter
-FINDEND:
-	CMP	SI, CR		; see if pointer is at carriage return
-	JE	FOUNDN2		; if equal, jump to evaluating 2nd number
-	INC CL			; increment counter
-	INC SI			; increment pointer
-FOUNDN2:
-	MOV BX, SI		; save current position of buffer
-	LEA	DI, NUM2+2 	; point to last character in NUM2
-F2:
-	DEC	SI		; move input pointer to previous character
-	MOV	AL, [SI]	; save input pointer from register to memory
-	MOV	[DI], AL	; move pointer from memory to register
-	DEC	DI		; move variable pointer down to next value
+EON1:	
+	MOV	AL,B[DI]	
+	CMP	B[DI],SPACE	; @ space?
+	JE	BUILDN1		; found end of NUM1
+	INC	DI		; not end, increment pointer
+	INC	CL		; increment character counter
+	JMP	EON1		; repeat
+BUILDN1:	
+	MOV	BX,DI		; save pointer location
+	LEA	SI,ANUM1+3	; point to last character in NUM1
+	MOV	B[SI],EOT	; add EOT to ASCII number
+BN1:	DEC	SI		; decrement NUM1 pointer
+	DEC	DI		; decrement INBUF pointer
 	DEC	CL		; decrement character counter
-	JNZ	F2		; if not 0, read in more characters
-	LEA	SI, BX		; once finished, point back to end
+	MOV	AL,B[DI]	; move 1's digit from INBUF to NUM1
+	MOV	B[SI],AL	;
+	CMP	CL,0		; any more characters to add?
+	JNE	BN1		; add another digit
+;
+; no more digits to add, save operator
+	LEA	SI,OP+1
+	MOV	B[SI],EOT
+	DEC	SI
+	LEA	DI,BX		; reset input pointer to 1st SPACE in input
+	INC	DI		; increment INBUF pointer
+	MOV	AL,B[DI]	; save character as operator
+	MOV	B[SI],AL	;
+	INC	DI		; increment INBUF pointer 2x
+	INC	DI
+	MOV	CL,0		; reset character count to 0
+EON2:	
+	CMP	B[DI],CR	; @ CR?
+	JE	BUILDN2		; found end of NUM2
+	INC	DI		; not end, increment pointer
+	INC	CL		; increment character counter
+	JMP	EON2		; repeat
+BUILDN2:	
+	MOV	BX,DI		; save pointer location	
+	LEA	SI,ANUM2+3	; point to last character in NUM2
+	MOV	B[SI],EOT	; add EOT to ASCII number
+BN2:	DEC	SI		; decrement NUM2 pointer
+	DEC	DI		; decrement INBUF pointer
+	DEC	CL		; decrement character counter
+	MOV	AL,B[DI]	; move 1's digit from INBUF to NUM2
+	MOV	B[SI],AL	;
+	CMP	CL,0		; any more characters to add?
+	JNE	BN2		; add another digit
+;
+; no more digits to add
+	LEA	DI,BX		; reset input pointer to end of INBUF
+;
+; output saved variables
+	WRITE	N1HDR
+	WRITE	ANUM1
+	WRITE	OPHDR
+	WRITE	OP
+	WRITE	N2HDR
+	WRITE	ANUM2
 
-	WRITE NUM2
 	EXIT
+;
 	END
