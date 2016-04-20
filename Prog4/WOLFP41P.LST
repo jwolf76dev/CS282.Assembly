@@ -1,0 +1,224 @@
+A86 V4.04 assembly of wolfp41p.COM                            2016-04-17  17:11
+: WolfProgram4                                                Page 1
+Source: wolfp41p.asm                                        
+
+  Begin Source: wolfp41p.asm
+    1                                     TITLE: WolfProgram4
+    2                                     PAGE 60, 132
+    3                             ;
+    4                             ;       ** Guessing Game (1-player version) **
+    5                             ;       Player must guess a random number between 0 and 9 which
+    6                             ;       is generated from the system clock.
+    7                             ;
+    8                             ;       If player guesses the number within 3 tries, they win a
+    9                             ;       differing amount of money based on how many guesses
+   10                             ;       it took. If they cannot guess the number within 3
+   11                             ;       tries, they lose. The player may play up to 9 rounds
+   12                             ;       per game and will receive a summary at the end of
+   13                             ;       the game.
+   14                             ;
+   15                             ;       Jay Wolf - April 19, 2016
+   16                             ;
+   17                             ;
+   18                             ;       Define constants
+   19                             ;
+   20 = : 000D                    CR      EQU     0DH             ; define carriage return
+   21 = : 000A                    LF      EQU     0AH             ; define line feed
+   22 = : 0024                    EOT     EQU     '$'             ; define end of text character
+   23                             ;
+   24                             ;       Define macros
+   25                             ;
+   26                             WRITE   MACRO
+   27                                     LEA     DX, #1
+   28                                     MOV     AH, 09H
+   29                                     INT     21H
+   30                                     #EM
+   31                             WRTDLR  MACRO
+   32                                     MOV     DL,'$'
+   33                                     MOV     AH,02H
+   34                                     INT     21H
+   35                                     #EM
+   36                             READ    MACRO
+   37                                     MOV     AH, 01H
+   38                                     INT     21H
+   39                                     #EM
+   40                             EXIT    MACRO
+   41                                     MOV     AX,4C00H
+   42                                     INT     21H
+   43                                     #EM
+   44                             ;
+   45 0100  E9 C4 03                      JMP     START           ; bypass variable definitions
+   46                             ;
+   47                             ;       Define variables
+   48                             ;
+   49 0103  20 20 20 20 20 20     SUMMARY DB      190 DUP ' '     ; define output buffer
+   50 01C1  0D 0A 2A 2A 2A 2A     RULES   DB      CR,LF,"***********  Guessing Game  ***************************",CR,LF,LF
+   51 01FD  20 20 59 6F 75 20             DB      "  You get three chances to guess a number from 0-9.",CR,LF
+   52 0232  20 20 47 65 74 20             DB      "  Get it right on the 1st guess and win ",EOT
+   53 025B  32 35 2E 0D 0A        WN25    DB      "25.",CR,LF
+   54 0260  20 20 47 65 74 20             DB      "  Get it right on the 2nd guess and win ",EOT
+A86 V4.04 assembly of wolfp41p.COM                                                                                 2016-04-17  17:11
+: WolfProgram4                                                                                                     Page 2
+Source: wolfp41p.asm                                        
+
+   55 0289  31 30 2E 0D 0A        WN10    DB      "10.",CR,LF
+   56 028E  20 20 47 65 74 20             DB      "  Get it right on the 3rd guess and win ",EOT
+   57 02B7  35 2E 0D 0A 0A        WN5     DB      "5.",CR,LF,LF
+   58 02BC  20 20 54 6F 20 70             DB      "  To play, simply type your guess.",CR,LF
+   59 02E0  20 20 54 68 65 72             DB      "  There's no need to press [ENTER] after your number.",CR,LF,LF
+   60 0318  2A 2A 2A 2A 2A 2A             DB      "*******************************************************",EOT
+   61 0350  0D 0A 0A 49 27 6D     PROMPT  DB      CR,LF,LF,"I'm thinking of a number from 0-9. Can you guess the number?",EOT
+   62 0390  0D 0A 0A 45 6E 74     GETGUES DB      CR,LF,LF,"Enter your guess: ",EOT
+   63 03A6  0D 0A 20 20 59 6F     TOOHIGH DB      CR,LF,"  Your guess was too high.",EOT
+   64 03C3  0D 0A 20 20 59 6F     TOOLOW  DB      CR,LF,"  Your guess was too low.",EOT
+   65 03DF  0D 0A 20 20 2A 2A     WIN     DB      CR,LF,"  ** Correct! You won ",EOT
+   66 03F8  32 35 21 20 2A 2A     WIN25   DB      "25! **",CR,LF,EOT
+   67 0401  31 30 21 20 2A 2A     WIN10   DB      "10! **",CR,LF,EOT
+   68 040A  35 21 20 2A 2A 0D     WIN5    DB      "5! **",CR,LF,EOT
+   69 0412  0D 0A 0A 59 6F 75     LOSE    DB      CR,LF,LF,"You did not guess the number within 3 tries. Sorry, you didn't 
+      0418  20 64 69 64 20 6E          win.",CR,LF,EOT
+   70 045B  0D 0A 57 6F 75 6C     NEWRND  DB      CR,LF,"Would you like to play again? (Y/N): ",EOT
+   71 0483  0D 0A 0A 2A 2A 20     HEADER  DB      CR,LF,LF,"** Game Summary ***",CR,LF
+   72 049B  0A 52 4E 44 20 44             DB      LF,"RND DN G1 G2 G3 WIN",CR,LF
+   73 04B1  2D 2D 2D 2D 2D 2D             DB      "-------------------",CR,LF,EOT
+   74                             ;
+   75                             ;       Beginning of code
+   76                             ;
+   77                             START:
+   78 04C7  BA C1 01 B4 09 CD             WRITE   RULES           ; write the rules of the game
+   79 04CE  B2 24 B4 02 CD 21             WRTDLR
+   80 04D4  BA 5B 02 B4 09 CD             WRITE   WN25
+   81 04DB  B2 24 B4 02 CD 21             WRTDLR
+   82 04E1  BA 89 02 B4 09 CD             WRITE   WN10
+   83 04E8  B2 24 B4 02 CD 21             WRTDLR
+   84 04EE  BA B7 02 B4 09 CD             WRITE   WN5
+   85 04F5  BF 03 01                      LEA     DI,SUMMARY      ; point to the summary buffer
+   86 04F8  B5 01                         MOV     CH,1            ; initialize the round counter
+   87                             
+   88 04FA  88 E9                 NRND:   MOV     CL,CH           ; place round counter in placeholder
+   89 04FC  80 C1 30                      ADD     CL,30H          ; add ASCII bias
+   90 04FF  88 4D 01                      MOV     [DI+1],CL       ; write round number to summary buffer
+   91 0502  BA 50 03 B4 09 CD             WRITE   PROMPT          ; output number prompt
+   92 0509  E8 3E 01                      CALL    RANDNUM         ; generate a random number from the system clock
+   93 050C  88 45 05                      MOV     [DI+5],AL       ; write secret number to summary buffer
+   94                             
+   95 050F  BA 90 03 B4 09 CD             WRITE   GETGUES         ; prompt player for 1st guess
+   96 0516  B4 01 CD 21                   READ                    ; get 1st guess
+   97 051A  88 45 08                      MOV     [DI+8],AL       ; write guess to summary buffer
+   98 051D  38 45 05                      CMP     [DI+5],AL       ; compare guess to secret number
+   99 0520  74 04                         JE      W25             ; guess correct, win $25
+  100 0522  72 29                         JB      THIGH1          ; guess too high
+  101 0524  77 31                         JA      TLOW1           ; guess too low
+  102 0526  BA DF 03 B4 09 CD     W25:    WRITE   WIN             ; output win message
+  103 052D  B2 24 B4 02 CD 21             WRTDLR                  ; output '$'
+  104 0533  BA F8 03 B4 09 CD             WRITE   WIN25           ; output dollar amount
+  105 053A  C6 45 0B 2D                   MOV     B[DI+11],'-'    ; write null for G2 to summary buffer
+  106 053E  C6 45 0E 2D                   MOV     B[DI+14],'-'    ; write null for G3 to summary buffer
+  107 0542  C6 45 11 32                   MOV     B[DI+17],'2'    ; write 2 for win to summary buffer
+  108 0546  C6 45 12 35                   MOV     B[DI+18],'5'    ; write 5 for win to summary buffer
+A86 V4.04 assembly of wolfp41p.COM                                                                                 2016-04-17  17:11
+: WolfProgram4                                                                                                     Page 3
+Source: wolfp41p.asm                                        
+
+  109 054A  E9 B6 00                      JMP     WRAPUP          ; complete the round in the summary buffer
+  110 054D  BA A6 03 B4 09 CD     THIGH1: WRITE   TOOHIGH         ; output too high message
+  111 0554  E9 0A 00                      JMP     G2              ; jump to the 2nd guess
+  112 0557  BA C3 03 B4 09 CD     TLOW1:  WRITE   TOOLOW          ; output too low message
+  113 055E  E9 00 00                      JMP     G2              ; jump to the 2nd guess
+  114                             
+  115 0561  BA 90 03 B4 09 CD     G2:     WRITE   GETGUES         ; prompt player for 2nd guess
+  116 0568  B4 01 CD 21                   READ                    ; get 2nd guess
+  117 056C  88 45 0B                      MOV     [DI+11],AL      ; write guess to sumary buffer
+  118 056F  38 45 05                      CMP     [DI+5],AL       ; compare guess to secret number
+  119 0572  74 04                         JE      W10             ; guess correct, win $10
+  120 0574  72 25                         JB      THIGH2          ; guess too high
+  121 0576  77 2D                         JA      TLOW2           ; guess too low
+  122 0578  BA DF 03 B4 09 CD     W10:    WRITE   WIN             ; output win message
+  123 057F  B2 24 B4 02 CD 21             WRTDLR                  ; output '$'
+  124 0585  BA 01 04 B4 09 CD             WRITE   WIN10           ; output dollar amount
+  125 058C  C6 45 0E 2D                   MOV     B[DI+14],'-'    ; write null for G3 in summary buffer
+  126 0590  C6 45 11 31                   MOV     B[DI+17],'1'    ; write 1 for win to summary buffer
+  127 0594  C6 45 12 30                   MOV     B[DI+18],'0'    ; write 0 for win to summary buffer
+  128 0598  E9 68 00                      JMP     WRAPUP          ; complete the round in the summary buffer
+  129 059B  BA A6 03 B4 09 CD     THIGH2: WRITE   TOOHIGH         ; output too high message
+  130 05A2  E9 0A 00                      JMP     G3              ; jump to the 3rd guess
+  131 05A5  BA C3 03 B4 09 CD     TLOW2:  WRITE   TOOLOW          ; output too low message
+  132 05AC  E9 00 00                      JMP     G3              ; jump to the 3rd guess
+  133                             
+  134 05AF  BA 90 03 B4 09 CD     G3:     WRITE   GETGUES         ; prompt player for 3rd guess
+  135 05B6  B4 01 CD 21                   READ                    ; get 3rd guess
+  136 05BA  88 45 0E                      MOV     [DI+14],AL      ; write guess to summary buffer
+  137 05BD  38 45 05                      CMP     [DI+5],AL       ; compare guess to secret number
+  138 05C0  74 04                         JE      W5              ; guess correct, win $5
+  139 05C2  72 1D                         JB      THIGH3          ; guess too high
+  140 05C4  77 25                         JA      TLOW3           ; guess too low
+  141 05C6  BA DF 03 B4 09 CD     W5:     WRITE   WIN             ; output win message
+  142 05CD  B2 24 B4 02 CD 21             WRTDLR                  ; output '$'
+  143 05D3  BA 0A 04 B4 09 CD             WRITE   WIN5            ; output dollar amount
+  144 05DA  C6 45 12 35                   MOV     B[DI+18],'5'    ; write 5 for win to summary buffer
+  145 05DE  E9 22 00                      JMP     WRAPUP          ; complete the round in the summary buffer
+  146 05E1  BA A6 03 B4 09 CD     THIGH3: WRITE   TOOHIGH         ; output too high message
+  147 05E8  E9 0A 00                      JMP     LOST            ; lost game
+  148 05EB  BA C3 03 B4 09 CD     TLOW3:  WRITE   TOOLOW          ; output too low message
+  149 05F2  E9 00 00                      JMP     LOST            ; lost game
+  150                             
+  151 05F5  BA 12 04 B4 09 CD     LOST:   WRITE   LOSE            ; output player lost message
+  152 05FC  C6 45 12 30                   MOV     B[DI+18],'0'    ; output 0 for win to summary buffer
+  153 0600  E9 00 00                      JMP     WRAPUP          ; complete the round in the summary buffer
+A86 V4.04 assembly of wolfp41p.COM                                                                                 2016-04-17  17:11
+: WolfProgram4                                                                                                     Page 4
+Source: wolfp41p.asm                                        
+
+  155 0603  C6 45 13 0D           WRAPUP: MOV     B[DI+19],CR     ; add CR to end of round
+  156 0607  C6 45 14 0A                   MOV     B[DI+20],LF     ; add LF to end of round
+  157 060B  FE C5                         INC     CH              ; increment round counter
+  158 060D  80 FD 09                      CMP     CH,9            ; >=9 rounds played?
+  159 0610  77 17                         JA      DONE            ; max rounds played; output summary
+  160 0612  BA 5B 04 B4 09 CD             WRITE   NEWRND          ; prompt player for another round
+  161 0619  B4 01 CD 21                   READ                    ; get player response
+  162 061D  0C 20                         OR      AL, 20H         ; convert upper-case letter to lower case if needed
+  163 061F  3C 79                         CMP     AL, 'y'         ; look for 'y'
+  164 0621  75 06                         JNE     DONE            ; not 'y', don't play another round
+  165 0623  83 C7 15                      ADD     DI,21           ; is 'y', move pointer to new round in summary buffer
+  166 0626  E9 D1 FE                      JMP     NRND            ; play anouther round
+  167                             
+  168 0629  C6 45 15 24           DONE:   MOV     B[DI+21],EOT    ; add EOT to output summary
+  169 062D  BF 03 01                      LEA     DI,SUMMARY      ; point to the start of the summary buffer
+  170 0630  BA 83 04 B4 09 CD             WRITE   HEADER          ; output game summary header
+  171                             
+  172 0637  80 3D 24              W0:     CMP     B[DI], EOT      ; check for end of buffer
+  173 063A  75 05                         JNE     W1              ; not end, stuff to output
+  174 063C  B8 00 4C CD 21                EXIT                    ; clean exit from program
+  175 0641  8A 15                 W1:     MOV     DL, [DI]        ; output character
+  176 0643  B4 02                         MOV     AH, 02H
+  177 0645  CD 21                         INT     21H
+  178 0647  47                            INC     DI              ; move to next character
+  179 0648  EB ED                         JMP     W0              ; continue output
+  180                             ;
+  181                             ;
+  182                             ;*** Subroutine RANDNUM *************************************
+  183                             ;
+  184                             ;       A subroutine to generate a random single-digit
+  185                             ;       number from 0-9 using the 100ths of a second
+  186                             ;       from the system clock.
+  187                             ;
+  188                             ;       ENTRY: CX will be pushed to stack
+  189                             ;       EXIT:  single-digit number in AL register, CX restored
+  190                             ;
+  191                             RANDNUM:
+  192 064A  51                            PUSH    CX              ; save the round counter
+  193 064B  B4 2C                         MOV     AH,2cH          ; Read the RTC
+  194 064D  CD 21                         INT     21H
+  195 064F  B4 00                         MOV     AH,0            ; reset AH to 0
+  196 0651  8A C2                         MOV     AL,DL           ; move 100ths of a second to AL
+  197 0653  B3 0A                         MOV     BL,10           ; load the divisor into a register
+  198 0655  F6 F3                         DIV     BL              ; create secret number from quotent
+  199 0657  04 30                         ADD     AL,30H          ; add ASCII bias
+  200 0659  59                            POP     CX              ; reload the round counter
+  201 065A  C3                            RET                     ; return to caller
+  202                             ;
+  203                             ;***********************************************************
+  204                             ;
+  205                             
+  206                                     END
+
