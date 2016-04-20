@@ -46,8 +46,8 @@ EXIT	MACRO
 INBUF	DB	10,?,10 DUP ? 	; define input buffer
 ANUM1	DB	4 DUP 0		; ASCII version of 1st number
 ANUM2	DB	4 DUP 0		; ASCII version of 2nd number
-BNUM1	DB	0		; Binary version of 1st number
-BNUM2	DB	0		; Binary version of 2nd number
+BNUM1	DB	4 DUP 0		; Binary version of 1st number
+BNUM2	DB	4 DUP 0		; Binary version of 2nd number
 OP	DB	0		; operator
 RESULT	DB	0		; Binary result
 ANSWER	DB	0		; ASCII result
@@ -127,18 +127,36 @@ BN2:	DEC	SI		; decrement NUM2 pointer
 	WRITE	ANUM2
 ;
 ; convert values to binary
-;	LEA	SI,ANUM1	; point to ANUM1
-;	CALL	A2B8		; convert ANUM1 to binary
-;	MOV	BNUM1,AL	; save result as BNUM1
-;	LEA	SI,ANUM2	; point to ANUM2
-;	CALL	A2B8		; convert ANUM2 to binary
-;	MOV	BNUM2,AL	; save result as BNUM2
+	LEA	SI,ANUM1	; point to ANUM1
+	CALL	A2B8		; convert ANUM1 to binary
+	MOV	BNUM1,AL	; save result as BNUM1
+
+	LEA	SI,ANUM2	; point to ANUM2
+	CALL	A2B8		; convert ANUM2 to binary
+	MOV	BNUM2,AL	; save result as BNUM2
 ;
 ; write values to screen
-;	WRITE	BNUM1
-;	WRITE	BNUM2
+	WRITE	BN1HDR
+	LEA	SI,BNUM1	; point to BNUM1
+	MOV	B[SI+3],EOT	; add EOT to last byte of BNUM1
+CHAR1:
+	CMP	B[SI],EOT
+	JE	C2
+	WRITEC	B[SI]
+	INC	SI
+	JMP	CHAR1
+	
+C2:	WRITE	BN2HDR
+	LEA	SI,BNUM2	; point to BNUM2
+	MOV	B[SI+3],EOT	; add EOT to last byte of BNUM2
+CHAR2:
+	CMP	B[SI],EOT
+	JE	ALLDONE
+	WRITEC	B[SI]
+	INC	SI
+	JMP	CHAR2
 ;
-	EXIT			; clean exit
+ALLDONE:	EXIT		; clean exit
 ;
 ;*** Subroutine A2B8 ***************************************
 ;
@@ -147,28 +165,34 @@ BN2:	DEC	SI		; decrement NUM2 pointer
 ;
 ;	Note: Does not perform error checking
 ;
-;	ENTRY: SI points to value;
+;	ENTRY: SI points to value; CH used as character counter
 ;	       BX will be used to build binary number
 ;	EXIT:  AL holds binary value
 ;
-;A2B8:
-;	ADD	SI,2		; point to 1's byte
-;	SUB	B[SI],30H	; remove ASCII bias
-;	MOV	BH,B[SI]	; add 1's value to result
-;	DEC	SI		; decrement pointer to 10's byte
-;	MOV	BL,B[SI]	; get 10's byte
-;	SUB	BL,30H		; remove ASCII bias
-;	MOV	AL,10		; multiply by 10
-;	MUL	BL		;
-;	ADD	BH,AL		; add 10's value to result
-;	DEC	SI		; decrement pointer to 100's byte
-;	MOV	BL,B[SI]	; get 100's byte
-;	SUB	BL,30H		; remove ASCII bias
-;	MOV	AL,100		; multiply by 100
-;	MUL	BL		;
-;	ADD	BH,BL		; add 100's value to result
-;	MOV	AL,BH		; move result to output register
-;	RET			; return to caller
+A2B8:
+	ADD	SI,2		; point to 1's place
+	SUB	B[SI],30H	; remove ASCII bias
+	MOV	BH,B[SI]	; add 1's value to result
+	DEC	SI		; decrement pointer to 10's byte
+	CMP	B[SI],0		; is character NULL? (0H)
+	JE	DONE		; no more characters to convert
+
+	MOV	BL,B[SI]	; get 10's byte
+	SUB	BL,30H		; remove ASCII bias
+	MOV	AL,10		; multiply by 10
+	MUL	BL		;
+	ADD	BH,AL		; add 10's value to result
+	DEC	SI		; decrement pointer to 100's byte
+	CMP	B[SI],0		; is character NULL? (0H)
+	JE	DONE		; no more characters to convert
+
+	MOV	BL,B[SI]	; get 100's byte
+	SUB	BL,30H		; remove ASCII bias
+	MOV	AL,100		; multiply by 100
+	MUL	BL		;
+	ADD	BH,AL		; add 100's value to result
+DONE:	MOV	AL,BH		; move result to output register
+	RET			; return to caller
 ;
 ;***********************************************************
 ;
