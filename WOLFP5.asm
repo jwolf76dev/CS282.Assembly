@@ -70,7 +70,6 @@ START:
 	LEA	DI,INBUF+2	; point to the user's input
 	MOV	CL,0		; initialize character counter to 0
 EON1:	
-	MOV	AL,B[DI]	
 	CMP	B[DI],SPACE	; @ space?
 	JE	BUILDN1		; found end of NUM1
 	INC	DI		; not end, increment pointer
@@ -137,24 +136,11 @@ BN2:	DEC	SI		; decrement NUM2 pointer
 ;
 ; write values to screen
 	WRITE	BN1HDR
-	LEA	SI,BNUM1	; point to BNUM1
-	MOV	B[SI+3],EOT	; add EOT to last byte of BNUM1
-CHAR1:
-	CMP	B[SI],EOT
-	JE	C2
-	WRITEC	B[SI]
-	INC	SI
-	JMP	CHAR1
-	
-C2:	WRITE	BN2HDR
-	LEA	SI,BNUM2	; point to BNUM2
-	MOV	B[SI+3],EOT	; add EOT to last byte of BNUM2
-CHAR2:
-	CMP	B[SI],EOT
-	JE	ALLDONE
-	WRITEC	B[SI]
-	INC	SI
-	JMP	CHAR2
+	MOV	AL,BNUM1
+	CALL	DUMP8
+	WRITE	BN2HDR
+	MOV	AL,BNUM2
+	CALL 	DUMP8	
 ;
 ALLDONE:	EXIT		; clean exit
 ;
@@ -204,23 +190,23 @@ DONE:	MOV	AL,BH		; move result to output register
 ;	Note: Does not perform error checking
 ;
 ;	ENTRY: AL holds binary value to output; CX used as
-;	character counter; BL used as working register
-;
+;	       character counter; BL used as working register
 ;	EXIT:  None
 ;
-A2B8:
+DUMP8:
 	MOV	BL,AL		; copy binary value to working register
 	MOV	CX,8		; initialize loop counter
-SHCHAR:	SHL	BL,1		; shift bits left by 1
+SHIFT:
+	SHL	BL,1		; shift bits left by 1
 	JC	PRINT1		; bit shifted out = 1; jump to P1
 	MOV	DL,'0'		; bit shifted out = 0; print it
 	MOV	AH,02H		;
 	INT	21H		;
-	JMP	DONE		;
+	JMP	NEXT		;
 PRINT1:	MOV	DL,'1'		; print '1'
 	MOV	AH,02H		;
 	INT	21H		;
-	LOOP	SHCHAR		; 
+NEXT:	LOOP	SHIFT		; 
 
 	RET			; return to caller
 ;
