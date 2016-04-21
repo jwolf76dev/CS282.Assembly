@@ -158,7 +158,7 @@ CHAR2:
 ;
 ALLDONE:	EXIT		; clean exit
 ;
-;*** Subroutine A2B8 ***************************************
+;*** Subroutine A2B8 ****************************************
 ;
 ;	A subroutine to convert a 3-digit ASCII value to
 ;	its corresponding Binary value
@@ -194,6 +194,35 @@ A2B8:
 DONE:	MOV	AL,BH		; move result to output register
 	RET			; return to caller
 ;
-;***********************************************************
+;************************************************************
 ;
+;*** Subroutine DUMP8 ***************************************
+;
+;	A subroutine to output the binary equivalent of a
+;	value in memory
+;
+;	Note: Does not perform error checking
+;
+;	ENTRY: AL holds binary value to output; CX used as
+;	character counter; BL used as working register
+;
+;	EXIT:  None
+;
+A2B8:
+	MOV	BL,AL		; copy binary value to working register
+	MOV	CX,8		; initialize loop counter
+SHCHAR:	SHL	BL,1		; shift bits left by 1
+	JC	PRINT1		; bit shifted out = 1; jump to P1
+	MOV	DL,'0'		; bit shifted out = 0; print it
+	MOV	AH,02H		;
+	INT	21H		;
+	JMP	DONE		;
+PRINT1:	MOV	DL,'1'		; print '1'
+	MOV	AH,02H		;
+	INT	21H		;
+	LOOP	SHCHAR		; 
+
+	RET			; return to caller
+;
+;***********************************************************
 	END			; end of program
