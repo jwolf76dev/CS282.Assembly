@@ -202,12 +202,11 @@ SHIFT:
 	MOV	DL,'0'		; bit shifted out = 0; print it
 	MOV	AH,02H		;
 	INT	21H		;
-	JMP	NEXT		;
+	JMP	NEXT		; process the next number
 PRINT1:	MOV	DL,'1'		; print '1'
 	MOV	AH,02H		;
 	INT	21H		;
-NEXT:	LOOP	SHIFT		; 
-
+NEXT:	LOOP	SHIFT		; more characters? repeat
 	RET			; return to caller
 ;
 ;***********************************************************

@@ -1,0 +1,13 @@
+## Ignore x86 Assembly support files, compiler, and debugger
+
+# Build results
+*.lst
+*.err
+*.old
+*.sym
+*.und
+
+# Compiler and Debugger
+A86.COM
+D86.COM
+Support/
