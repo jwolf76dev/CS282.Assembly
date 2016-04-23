@@ -49,10 +49,13 @@ ANUM2	DB	4 DUP 0		; ASCII version of 2nd number
 BNUM1	DB	4 DUP 0		; Binary version of 1st number
 BNUM2	DB	4 DUP 0		; Binary version of 2nd number
 OP	DB	0		; operator
-RESULT	DB	0		; Binary result
-ANSWER	DB	0		; ASCII result
+RESULT	DW	0		; Binary result
+BINQUO	DB	0		; Binary quotent for division
+BINREM	DB	0		; BInary remainder for division
+ANSWER	DW	0		; ASCII result
 HEADER	DB	CR,LF,"**********  Cheap Calculator  **********",CR,LF,LF
 	DB	"Enter your equation: ",EOT
+BADOP	DB	CR,LF,"Invalid operand. Exiting program.",CR,LF,EOT
 ;
 ;	Testing Variables
 ;
@@ -60,7 +63,11 @@ AN1HDR	DB	CR,LF,"ANUM1: ",EOT
 OPHDR	DB	CR,LF,"   OP: ",EOT
 AN2HDR	DB	CR,LF,"ANUM2: ",EOT	
 BN1HDR	DB	CR,LF,"BNUM1: ",EOT
-BN2HDR	DB	CR,LF,"BNUM2: ",EOT	
+BN2HDR	DB	CR,LF,"BNUM2: ",EOT
+BRESULT	DB	CR,LF,"RESULT: ",EOT
+BQUO	DB	CR,LF,"QUOTENT: ",EOT
+BREM	DB	CR,LF,"REMAINDER: ",EOT
+ARESULT	DB	CR,LF,"ANSWER: ",EOT	
 ;
 START:
 	WRITE	HEADER		; write rules & prompt user for equation
@@ -140,8 +147,45 @@ BN2:	DEC	SI		; decrement NUM2 pointer
 	CALL	DUMP8
 	WRITE	BN2HDR
 	MOV	AL,BNUM2
-	CALL 	DUMP8	
+	CALL 	DUMP8
 ;
+; preload registers with operands
+	MOV	AL,BNUM1	; move 1st operand to register
+	MOV	AH,BNUM2	; move 2nd operand to register
+	LEA	SI,ANSWER	; point to ASCII answer
+;
+; process equation based on operand
+	CMP	[OP],'+'	; look for add
+;	JNE	SUB?		; not add, look for subtraction
+	JNE	MUL?		; TO DELETE JUST FOR TESTING
+	CALL	ADDTHEM		; add operands
+	MOV	RESULT,AX	; save binary result
+	JMP	OUTPUT		; output result
+;SUB?:	CMP	[OP], '-'	; look for subtract
+;	JNE	MUL?		; not subtract, look for multiply
+;	CALL	SUBTHEM		; subtract operands
+;	MOV	RESULT,AX	; save binary result
+;	JMP	OUTPUT		; output result
+MUL?:	CMP	[OP],'*'	; look for multiply
+;	JNE	DIV?		; not multiply, look for divide
+	CALL	MULTHEM		; multiply operands
+	MOV	RESULT,AX	; save binary result
+	JMP	OUTPUT		; write result
+;DIV?:	CMP	[OP],'/'	; look for divide
+;	JNE	BAD		; not divide, must be bad operator
+;	CALL	DIVTHEM		; divide operands
+;	MOV	BINQUO,AL	; save binary quotent
+	MOV	BINREM,AH	; save binary remainder
+;	JMP	OUTPUT		; output result
+BAD:	WRITE	BADOP		; write operator error message
+	EXIT			; clean exit
+;
+; output result
+OUTPUT:
+	WRITE	BRESULT
+	MOV	AX,RESULT
+	CALL	DUMP16
+
 ALLDONE:	EXIT		; clean exit
 ;
 ;*** Subroutine A2B8 ****************************************
@@ -182,9 +226,44 @@ DONE:	MOV	AL,BH		; move result to output register
 ;
 ;************************************************************
 ;
+;*** Subroutine ADDTHEM *************************************
+;
+;	A subroutine to add 2 8-bit binary numbers
+;
+;	Note: Does not perform error checking
+;
+;	ENTRY: AL holds first number; AH holds 2nd number;
+;	       SI points to ASCII output buffer
+;	EXIT:  AX holds binary result
+;
+ADDTHEM:
+	ADD	AL,AH		; result stored in AL
+	MOV	AH,0		; reset upper 8-bits of AX register to 0
+	ADC	AH,0		; move carry bit into upper 8-bits of AX
+	RET			; return to caller
+;
+;************************************************************
+;
+;*** Subroutine MULTHEM *************************************
+;
+;	A subroutine to multiply 2 8-bit binary numbers
+;
+;	Note: Does not perform error checking
+;
+;	ENTRY: AL holds first number; AH holds 2nd number;
+;	       SI points to ASCII output buffer
+;	EXIT:  AX holds binary result
+;
+MULTHEM:
+	MUL	AH		; result stored in AL
+	MOV	AH,0		; reset upper 8-bits of AX register to 0
+	RET			; return to caller
+;
+;************************************************************
+;
 ;*** Subroutine DUMP8 ***************************************
 ;
-;	A subroutine to output the binary equivalent of a
+;	A subroutine to output the 8-bit binary equivalent of a
 ;	value in memory
 ;
 ;	Note: Does not perform error checking
@@ -196,17 +275,46 @@ DONE:	MOV	AL,BH		; move result to output register
 DUMP8:
 	MOV	BL,AL		; copy binary value to working register
 	MOV	CX,8		; initialize loop counter
-SHIFT:
+SHIFT_8:
 	SHL	BL,1		; shift bits left by 1
-	JC	PRINT1		; bit shifted out = 1; jump to P1
+	JC	PRINT1_8		; bit shifted out = 1; jump to P1
 	MOV	DL,'0'		; bit shifted out = 0; print it
 	MOV	AH,02H		;
 	INT	21H		;
-	JMP	NEXT		; process the next number
-PRINT1:	MOV	DL,'1'		; print '1'
+	JMP	NEXT_8		; process the next number
+PRINT1_8:	MOV	DL,'1'		; print '1'
 	MOV	AH,02H		;
 	INT	21H		;
-NEXT:	LOOP	SHIFT		; more characters? repeat
+NEXT_8:	LOOP	SHIFT_8		; more characters? repeat
+	RET			; return to caller
+;
+;***********************************************************
+;
+;*** Subroutine DUMP16 *************************************
+;
+;	A subroutine to output the 16-bit binary equivalent of a
+;	value in memory
+;
+;	Note: Does not perform error checking
+;
+;	ENTRY: AX holds binary value to output; CX used as
+;	       character counter; BX used as working register
+;	EXIT:  None
+;
+DUMP16:
+	MOV	BX,AX		; copy binary value to working register
+	MOV	CX,16		; initialize loop counter
+SHIFT_16:
+	SHL	BX,1		; shift bits left by 1
+	JC	PRINT1_16	; bit shifted out = 1; jump to P1
+	MOV	DL,'0'		; bit shifted out = 0; print it
+	MOV	AH,02H		;
+	INT	21H		;
+	JMP	NEXT_16		; process the next number
+PRINT1_16:	MOV	DL,'1'	; print '1'
+	MOV	AH,02H		;
+	INT	21H		;
+NEXT_16:LOOP	SHIFT_16	; more characters? repeat
 	RET			; return to caller
 ;
 ;***********************************************************
