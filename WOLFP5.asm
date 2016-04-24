@@ -52,10 +52,12 @@ OP	DB	0		; operator
 RESULT	DW	0		; Binary result
 BQUO	DB	0		; Binary quotent for division
 BREM	DB	0		; BInary remainder for division
-ANSWER	DB	7 DUP 0		; ASCII result for output
+ANSWER	DB	7 DUP 0		; ASCII result for result
+REMAIN	DB	6 DUP 0		; ASCII result for division remainder
 HEADER	DB	CR,LF,"**********  Cheap Calculator  **********",CR,LF,LF
 	DB	"Enter your equation: ",EOT
 BADOP	DB	CR,LF,"Invalid operand.",CR,LF,EOT
+DIVREM	DB	" r ",EOT
 ;
 ;	Testing Variables
 ;
@@ -68,7 +70,7 @@ BRESULT	DB	CR,LF,"   RESULT: ",EOT
 ARESULT	DB	CR,LF,"   ANSWER: ",EOT
 ALEQU	DB	CR,LF,"	      AL: ",EOT
 AHEQU	DB	CR,LF,"	      AH: ",EOT
-BQUOHRD	DB	CR,LF,"  QUOTENT: ",EOT
+BQUOHDR	DB	CR,LF,"  QUOTENT: ",EOT
 BREMHDR	DB	CR,LF,"REMAINDER: ",EOT
 ;
 START:
@@ -168,17 +170,16 @@ SUB?:	CMP	[OP], '-'	; look for subtract
 	MOV	RESULT,AX	; save binary result
 	JMP	OUTPUT		; output result
 MUL?:	CMP	[OP],'*'	; look for multiply
-;	JNE	DIV?		; not multiply, look for divide
-	JNE	BAD		
+	JNE	DIV?		; not multiply, look for divide
 	CALL	MULTHEM		; multiply operands
 	MOV	RESULT,AX	; save binary result
 	JMP	OUTPUT		; write result
-;DIV?:	CMP	[OP],'/'	; look for divide
-;	JNE	BAD		; not divide, must be bad operator
-;	CALL	DIVTHEM		; divide operands
-;	MOV	BINQUO,AL	; save binary quotent
-;	MOV	BINREM,AH	; save binary remainder
-;	JMP	OUTPUT		; output result
+DIV?:	CMP	[OP],'/'	; look for divide
+	JNE	BAD		; not divide, must be bad operator
+	CALL	DIVTHEM		; divide operands
+	MOV	BQUO,AL		; save binary quotent
+	MOV	BREM,AH		; save binary remainder
+	JMP	OUTDIV		; output result
 BAD:	WRITE	BADOP		; write operator error message
 	EXIT			; clean exit
 ;
@@ -192,8 +193,32 @@ OUTPUT:
 	MOV	AX,RESULT
 	CALL	B2A16
 	WRITE	ANSWER
+	JMP	ALLDONE
+
+OUTDIV:
+	WRITE	BQUOHDR
+	MOV	BL,BQUO
+	CALL	DUMP8
 	
-ALLDONE:	EXIT		; clean exit
+	WRITE	BREMHDR
+	MOV	BL,BREM
+	CALL	DUMP8
+
+	WRITE	ARESULT
+	MOV	AL,BQUO
+	MOV	AH,0
+	CALL	B2A16
+	WRITE	ANSWER
+
+	LEA	SI,REMAIN
+	WRITE	DIVREM
+	MOV	AL,BREM
+	MOV	AH,0
+	CALL	B2A16
+	WRITE	REMAIN
+	
+ALLDONE:
+	EXIT			; clean exit
 ;
 ;*** Subroutine A2B8 ****************************************
 ;
@@ -332,6 +357,25 @@ POSNUM:	RET			; return to caller
 ;
 MULTHEM:
 	MUL	AH		; result stored in AX
+	RET			; return to caller
+;
+;************************************************************
+;
+;*** Subroutine DIVTHEM *************************************
+;
+;	A subroutine to divide 2 8-bit binary numbers
+;
+;	Note: Does not perform error checking
+;
+;	ENTRY:	AL holds numerator; AH holds denominator;
+;		SI points to ASCII output buffer
+;	EXIT:	AL holds binary quotient; AH holds binary remainder
+;	USED:	BL for working register
+;
+DIVTHEM:
+	MOV	BL,AH		; move denominator to working register
+	MOV	AH,0		; reset AH
+	DIV	BL		; result stored in AX
 	RET			; return to caller
 ;
 ;************************************************************
