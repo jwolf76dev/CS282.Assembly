@@ -68,6 +68,7 @@ BN1HDR	DB	CR,LF,"    BNUM1: ",EOT
 BN2HDR	DB	CR,LF,"    BNUM2: ",EOT
 BRESULT	DB	CR,LF,"   RESULT: ",EOT
 ARESULT	DB	CR,LF,"   ANSWER: ",EOT
+CLEANANS DB	CR,LF,"CLEAN ANS: ",EOT
 ALEQU	DB	CR,LF,"	      AL: ",EOT
 AHEQU	DB	CR,LF,"	      AH: ",EOT
 BQUOHDR	DB	CR,LF,"  QUOTENT: ",EOT
@@ -193,6 +194,10 @@ OUTPUT:
 	MOV	AX,RESULT
 	CALL	B2A16
 	WRITE	ANSWER
+
+	WRITE	CLEANANS
+	LEA	SI,ANSWER
+	CALL	PRNTTHEM
 	JMP	ALLDONE
 
 OUTDIV:
@@ -210,12 +215,20 @@ OUTDIV:
 	CALL	B2A16
 	WRITE	ANSWER
 
-	LEA	SI,REMAIN
 	WRITE	DIVREM
+	LEA	SI,REMAIN
 	MOV	AL,BREM
 	MOV	AH,0
 	CALL	B2A16
 	WRITE	REMAIN
+
+	WRITE	CLEANANS
+	LEA	SI,ANSWER
+	CALL	PRNTTHEM
+
+	WRITE	DIVREM
+	LEA	SI,REMAIN
+	CALL	PRNTTHEM
 	
 ALLDONE:
 	EXIT			; clean exit
@@ -376,6 +389,38 @@ DIVTHEM:
 	MOV	BL,AH		; move denominator to working register
 	MOV	AH,0		; reset AH
 	DIV	BL		; result stored in AX
+	RET			; return to caller
+;
+;************************************************************
+;
+;*** Subroutine PRNTTHEM *************************************
+;
+;	A subroutine to suppress leading zeros in ASCII output
+;
+;	Note: Does not perform error checking
+;
+;	ENTRY:	SI points to ASCII buffer to output
+;	EXIT:	none
+;	USED:	DL for output, CL for counter
+;
+PRNTTHEM:
+	MOV	CL,4		; initialize counter
+	CMP	B[SI],'-'	; is char negative number?
+	JNE	ISZERO?		; not negative, look for zero
+	WRITEC	B[SI]		; is negative, print '-'
+	INC	SI		; increment pointer
+	DEC	CL		; decrement counter
+ISZERO?:	
+	CMP	B[SI],'0'	; leading zero?
+	JNE	PRINTIT		; not 0, print it
+	INC	SI		; is 0, increment pointer
+	DEC	CL		; decrement counter
+	JNZ	ISZERO?		; more characters to process
+PRINTIT:
+	WRITEC	B[SI]		; print character
+	INC	SI		; increment pointer
+	CMP	B[SI],EOT	; @ end of string?
+	JNE	PRINTIT		; more characters to process
 	RET			; return to caller
 ;
 ;************************************************************
