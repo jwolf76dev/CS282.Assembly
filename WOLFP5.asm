@@ -158,16 +158,15 @@ BN2:	DEC	SI		; decrement NUM2 pointer
 ;
 ; process equation based on operand
 	CMP	[OP],'+'	; look for add
-;	JNE	SUB?		; not add, look for subtraction
-	JNE	MUL?		; TO DELETE JUST FOR TESTING
+	JNE	SUB?		; not add, look for subtraction
 	CALL	ADDTHEM		; add operands
 	MOV	RESULT,AX	; save binary result
 	JMP	OUTPUT		; output result
-;SUB?:	CMP	[OP], '-'	; look for subtract
-;	JNE	MUL?		; not subtract, look for multiply
-;	CALL	SUBTHEM		; subtract operands
-;	MOV	RESULT,AX	; save binary result
-;	JMP	OUTPUT		; output result
+SUB?:	CMP	[OP], '-'	; look for subtract
+	JNE	MUL?		; not subtract, look for multiply
+	CALL	SUBTHEM		; subtract operands
+	MOV	RESULT,AX	; save binary result
+	JMP	OUTPUT		; output result
 MUL?:	CMP	[OP],'*'	; look for multiply
 ;	JNE	DIV?		; not multiply, look for divide
 	JNE	BAD		
@@ -297,6 +296,27 @@ ADDTHEM:
 	MOV	AH,0		; reset upper 8-bits of AX register to 0
 	ADC	AH,0		; move carry bit into upper 8-bits of AX
 	RET			; return to caller
+;
+;************************************************************
+;
+;*** Subroutine SUBTHEM *************************************
+;
+;	A subroutine to subtract 2 8-bit binary numbers
+;
+;	Note: Does not perform error checking
+;
+;	ENTRY: AL holds first number; AH holds 2nd number;
+;	       SI points to ASCII output buffer
+;	EXIT:  AX holds binary result
+;
+SUBTHEM:
+	SUB	AL,AH		; result stored in AX
+	MOV	AH,0		; reset upper 8 bits of AX to 0
+	JNC	POSNUM		; result is a positive number
+	NEG	AL		; negate result (2's complement)
+	MOV	B[SI],'-'	; add '-' to output
+	INC	SI		; increment answer pointer
+POSNUM:	RET			; return to caller
 ;
 ;************************************************************
 ;
