@@ -52,22 +52,22 @@ OP	DB	0		; operator
 RESULT	DW	0		; Binary result
 BINQUO	DB	0		; Binary quotent for division
 BINREM	DB	0		; BInary remainder for division
-ANSWER	DW	0		; ASCII result
+ANSWER	DW	7 DUP 0		; ASCII result for output
 HEADER	DB	CR,LF,"**********  Cheap Calculator  **********",CR,LF,LF
 	DB	"Enter your equation: ",EOT
-BADOP	DB	CR,LF,"Invalid operand. Exiting program.",CR,LF,EOT
+BADOP	DB	CR,LF,"Invalid operand.",CR,LF,EOT
 ;
 ;	Testing Variables
 ;
-AN1HDR	DB	CR,LF,"ANUM1: ",EOT
-OPHDR	DB	CR,LF,"   OP: ",EOT
-AN2HDR	DB	CR,LF,"ANUM2: ",EOT	
-BN1HDR	DB	CR,LF,"BNUM1: ",EOT
-BN2HDR	DB	CR,LF,"BNUM2: ",EOT
-BRESULT	DB	CR,LF,"RESULT: ",EOT
-BQUO	DB	CR,LF,"QUOTENT: ",EOT
+AN1HDR	DB	CR,LF,"    ANUM1: ",EOT
+OPHDR	DB	CR,LF,"       OP: ",EOT
+AN2HDR	DB	CR,LF,"    ANUM2: ",EOT	
+BN1HDR	DB	CR,LF,"    BNUM1: ",EOT
+BN2HDR	DB	CR,LF,"    BNUM2: ",EOT
+BRESULT	DB	CR,LF,"   RESULT: ",EOT
+ARESULT	DB	CR,LF,"   ANSWER: ",EOT	
+BQUO	DB	CR,LF,"  QUOTENT: ",EOT
 BREM	DB	CR,LF,"REMAINDER: ",EOT
-ARESULT	DB	CR,LF,"ANSWER: ",EOT	
 ;
 START:
 	WRITE	HEADER		; write rules & prompt user for equation
@@ -157,7 +157,7 @@ BN2:	DEC	SI		; decrement NUM2 pointer
 ; process equation based on operand
 	CMP	[OP],'+'	; look for add
 ;	JNE	SUB?		; not add, look for subtraction
-	JNE	MUL?		; TO DELETE JUST FOR TESTING
+	JNE	BAD		; TO DELETE JUST FOR TESTING
 	CALL	ADDTHEM		; add operands
 	MOV	RESULT,AX	; save binary result
 	JMP	OUTPUT		; output result
@@ -166,16 +166,16 @@ BN2:	DEC	SI		; decrement NUM2 pointer
 ;	CALL	SUBTHEM		; subtract operands
 ;	MOV	RESULT,AX	; save binary result
 ;	JMP	OUTPUT		; output result
-MUL?:	CMP	[OP],'*'	; look for multiply
+;MUL?:	CMP	[OP],'*'	; look for multiply
 ;	JNE	DIV?		; not multiply, look for divide
-	CALL	MULTHEM		; multiply operands
-	MOV	RESULT,AX	; save binary result
-	JMP	OUTPUT		; write result
+;	CALL	MULTHEM		; multiply operands
+;	MOV	RESULT,DX:AX	; save binary result
+;	JMP	OUTPUT		; write result
 ;DIV?:	CMP	[OP],'/'	; look for divide
 ;	JNE	BAD		; not divide, must be bad operator
 ;	CALL	DIVTHEM		; divide operands
 ;	MOV	BINQUO,AL	; save binary quotent
-	MOV	BINREM,AH	; save binary remainder
+;	MOV	BINREM,AH	; save binary remainder
 ;	JMP	OUTPUT		; output result
 BAD:	WRITE	BADOP		; write operator error message
 	EXIT			; clean exit
@@ -183,9 +183,13 @@ BAD:	WRITE	BADOP		; write operator error message
 ; output result
 OUTPUT:
 	WRITE	BRESULT
+	CALL	DUMP8
+	WRITE	ARESULT
 	MOV	AX,RESULT
-	CALL	DUMP16
-
+	MOV	AH,0
+	CALL	B2A8
+	WRITE	ANSWER
+	
 ALLDONE:	EXIT		; clean exit
 ;
 ;*** Subroutine A2B8 ****************************************
@@ -226,6 +230,65 @@ DONE:	MOV	AL,BH		; move result to output register
 ;
 ;************************************************************
 ;
+;*** Subroutine B2A8 ****************************************
+;
+;	A subroutine to convert an 8-bit binary number to
+;	its corresponding 8-bit ASCII value
+;
+;	Note: Does not perform error checking
+;
+;	ENTRY: AL holds 8-bit value to convert
+;	       SI points to ASCII save buffer
+;	       CX used as a counter
+;	EXIT:  none
+;
+B2A8:
+	MOV	CX,0
+HUND:	SUB	AL,100
+	JC	TENs
+	INC	CX
+	JMP	HUND
+TENS:	MOV	[DI],CL
+	ADD	AL,100
+	MOV	CX,0
+TENS1:	SUB	AL,10
+	JC	UNITS
+	INC	CX
+	JMP	TENS1
+UNITS:	MOV	[SI+1],CL
+	ADD	AL,10
+	MOV	[SI+2],AL
+	ADD	B[SI],30H
+	ADD	B[SI+1],30H
+	ADD	B[SI+2],30H
+	ADD	B[SI+3],EOT
+
+;MOV	BX,10000
+;	DIV	BX
+;	MOV	[SI],AL
+;	MOV	AX,DX
+;	MOV	BX,1000
+;	DIV	BX
+;	MOV	[SI+1],AL
+;	MOV	AX,DX
+;	MOV	BX,100
+;	DIV	BX
+;	MOV	[SI+2],AL
+;	MOV	AX,DX
+;	MOV	BX,10
+;	DIV	BX
+;	MOV	[SI+3],AL
+;	MOV	[SI+4],DL
+;	ADD	B[SI],30H
+;	ADD	B[SI+1],30H
+;	ADD	B[SI+2],30H
+;	ADD	B[SI+3],30H
+;	ADD	B[SI+4],30H
+;	ADD	B[SI+5],EOT
+	RET			; return to caller
+
+;************************************************************
+;
 ;*** Subroutine ADDTHEM *************************************
 ;
 ;	A subroutine to add 2 8-bit binary numbers
@@ -252,12 +315,11 @@ ADDTHEM:
 ;
 ;	ENTRY: AL holds first number; AH holds 2nd number;
 ;	       SI points to ASCII output buffer
-;	EXIT:  AX holds binary result
+;	EXIT:  AX holds binary result (or DX:AX for 32-bit results)
 ;
-MULTHEM:
-	MUL	AH		; result stored in AL
-	MOV	AH,0		; reset upper 8-bits of AX register to 0
-	RET			; return to caller
+;MULTHEM:
+;	MUL	AL,AH		; result stored in AL, AX, or AX:DX
+;	RET			; return to caller
 ;
 ;************************************************************
 ;
@@ -277,12 +339,12 @@ DUMP8:
 	MOV	CX,8		; initialize loop counter
 SHIFT_8:
 	SHL	BL,1		; shift bits left by 1
-	JC	PRINT1_8		; bit shifted out = 1; jump to P1
+	JC	PRT1_8		; bit shifted out = 1; jump to P1
 	MOV	DL,'0'		; bit shifted out = 0; print it
 	MOV	AH,02H		;
 	INT	21H		;
 	JMP	NEXT_8		; process the next number
-PRINT1_8:	MOV	DL,'1'		; print '1'
+PRT1_8:	MOV	DL,'1'		; print '1'
 	MOV	AH,02H		;
 	INT	21H		;
 NEXT_8:	LOOP	SHIFT_8		; more characters? repeat
@@ -306,16 +368,17 @@ DUMP16:
 	MOV	CX,16		; initialize loop counter
 SHIFT_16:
 	SHL	BX,1		; shift bits left by 1
-	JC	PRINT1_16	; bit shifted out = 1; jump to P1
+	JC	PRT1_16		; bit shifted out = 1; jump to P1
 	MOV	DL,'0'		; bit shifted out = 0; print it
 	MOV	AH,02H		;
 	INT	21H		;
 	JMP	NEXT_16		; process the next number
-PRINT1_16:	MOV	DL,'1'	; print '1'
+PRT1_16:MOV	DL,'1'		; print '1'
 	MOV	AH,02H		;
 	INT	21H		;
 NEXT_16:LOOP	SHIFT_16	; more characters? repeat
 	RET			; return to caller
 ;
 ;***********************************************************
+;
 	END			; end of program
