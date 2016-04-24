@@ -159,7 +159,7 @@ BN2:	DEC	SI		; decrement NUM2 pointer
 ; process equation based on operand
 	CMP	[OP],'+'	; look for add
 ;	JNE	SUB?		; not add, look for subtraction
-	JNE	BAD		; TO DELETE JUST FOR TESTING
+	JNE	MUL?		; TO DELETE JUST FOR TESTING
 	CALL	ADDTHEM		; add operands
 	MOV	RESULT,AX	; save binary result
 	JMP	OUTPUT		; output result
@@ -168,11 +168,12 @@ BN2:	DEC	SI		; decrement NUM2 pointer
 ;	CALL	SUBTHEM		; subtract operands
 ;	MOV	RESULT,AX	; save binary result
 ;	JMP	OUTPUT		; output result
-;MUL?:	CMP	[OP],'*'	; look for multiply
+MUL?:	CMP	[OP],'*'	; look for multiply
 ;	JNE	DIV?		; not multiply, look for divide
-;	CALL	MULTHEM		; multiply operands
-;	MOV	RESULT,DX:AX	; save binary result
-;	JMP	OUTPUT		; write result
+	JNE	BAD		
+	CALL	MULTHEM		; multiply operands
+	MOV	RESULT,AX	; save binary result
+	JMP	OUTPUT		; write result
 ;DIV?:	CMP	[OP],'/'	; look for divide
 ;	JNE	BAD		; not divide, must be bad operator
 ;	CALL	DIVTHEM		; divide operands
@@ -246,71 +247,38 @@ DONE:	MOV	AL,BH		; move result to output register
 ;	USED:	CX as a counter; DX for division operations
 ;
 B2A16:
-;	MOV	CX,0
-;TNTHOU:	SUB	AX,10000
-;	JC	THOU
-;	INC	CX
-;	JMP	TNTHOU
-;THOU:	MOV	[SI],CL
-;	ADD	AX,10000
-;	MOV	CX,0
-;THOU1:	SUB	AX,1000
-;	JC	HUND
-;	INC	CX
-;	JMP	THOU1
-;HUND:	MOV	[SI+1],CL
-;	ADD	AX,1000
-;	MOV	CX,0
-;HUND1:	SUB	Ax,100
-;	JC	TENs
-;	INC	CX
-;	JMP	HUND
-;TENS:	MOV	[SI+2],CL
-;	ADD	AL,100
-;	MOV	CX,0
-;TENS1:	SUB	AL,10
-;	JC	UNITS
-;	INC	CX
-;	JMP	TENS1
-;UNITS:	MOV	[SI+3],CL
-;	ADD	AL,10
-;	MOV	[SI+4],AL
-;
-; add ASCII bias and EOT
-;	ADD	B[SI],30H
-;	ADD	B[SI+1],30H
-;	ADD	B[SI+2],30H
-;	ADD	B[SI+3],30H
-;	ADD	B[SI+4],30H
-;	ADD	B[SI+5],EOT
-
 	MOV	DX,0		; reset remainder to 0
 	MOV	BX,10000	; load 10000 into denominator
 	DIV	BX		; divide AX by BX
 	ADD	AX,3030H	; add ASCII bias to result
 	MOV	[SI],AL		; save result in 1st char of answer
+
 	MOV	AX,DX		; load remainder into numerator
 	MOV	DX,0		; reset remainder to 0
 	MOV	BX,1000		; load 1000 into denominator
 	DIV	BX		; divide AX by BX
 	ADD	AX,3030H	; add ASCII bias to result
 	MOV	[SI+1],AL	; save result in 2nd char of answer
+
 	MOV	AX,DX		; load remainder into numerator
 	MOV	DX,0		; reset remainder to 0
 	MOV	BX,100		; load 100 into denominator
 	DIV	BX		; divide AX by BX
 	ADD	AX,3030H	; add ASCII bias to result
 	MOV	[SI+2],AL	; save result in 3rd char of answer
+
 	MOV	AX,DX		; load remiander into numerator
 	MOV	DX,0		; reset remainder to 0
 	MOV	BX,10		; load 10 into denominator
 	DIV	BX		; divide AX by BX
 	ADD	AX,3030H	; add ASCII bias to result
 	MOV	[SI+3],AL	; save result in 4th char of answer
+
 	ADD	DX,3030H	; add ASCII bias to remainder
 	MOV	[SI+4],DL	; save result in 5th char of answer
+
 	ADD	B[SI+5],EOT	; add EOT to ASCII string
-;	RET			; return to caller
+	RET			; return to caller
 ;
 ;************************************************************
 ;
@@ -340,11 +308,11 @@ ADDTHEM:
 ;
 ;	ENTRY: AL holds first number; AH holds 2nd number;
 ;	       SI points to ASCII output buffer
-;	EXIT:  AX holds binary result (or DX:AX for 32-bit results)
+;	EXIT:  AX holds binary result
 ;
-;MULTHEM:
-;	MUL	AL,AH		; result stored in AL, AX, or AX:DX
-;	RET			; return to caller
+MULTHEM:
+	MUL	AH		; result stored in AX
+	RET			; return to caller
 ;
 ;************************************************************
 ;
