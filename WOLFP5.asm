@@ -50,8 +50,8 @@ BNUM1	DB	4 DUP 0		; Binary version of 1st number
 BNUM2	DB	4 DUP 0		; Binary version of 2nd number
 OP	DB	0		; operator
 RESULT	DW	0		; Binary result
-BINQUO	DB	0		; Binary quotent for division
-BINREM	DB	0		; BInary remainder for division
+BQUO	DB	0		; Binary quotent for division
+BREM	DB	0		; BInary remainder for division
 ANSWER	DW	7 DUP 0		; ASCII result for output
 HEADER	DB	CR,LF,"**********  Cheap Calculator  **********",CR,LF,LF
 	DB	"Enter your equation: ",EOT
@@ -65,9 +65,11 @@ AN2HDR	DB	CR,LF,"    ANUM2: ",EOT
 BN1HDR	DB	CR,LF,"    BNUM1: ",EOT
 BN2HDR	DB	CR,LF,"    BNUM2: ",EOT
 BRESULT	DB	CR,LF,"   RESULT: ",EOT
-ARESULT	DB	CR,LF,"   ANSWER: ",EOT	
-BQUO	DB	CR,LF,"  QUOTENT: ",EOT
-BREM	DB	CR,LF,"REMAINDER: ",EOT
+ARESULT	DB	CR,LF,"   ANSWER: ",EOT
+ALEQU	DB	CR,LF,"	      AL: ",EOT
+AHEQU	DB	CR,LF,"	      AH: ",EOT
+BQUOHRD	DB	CR,LF,"  QUOTENT: ",EOT
+BREMHDR	DB	CR,LF,"REMAINDER: ",EOT
 ;
 START:
 	WRITE	HEADER		; write rules & prompt user for equation
@@ -143,10 +145,10 @@ BN2:	DEC	SI		; decrement NUM2 pointer
 ;
 ; write values to screen
 	WRITE	BN1HDR
-	MOV	AL,BNUM1
+	MOV	BL,BNUM1
 	CALL	DUMP8
 	WRITE	BN2HDR
-	MOV	AL,BNUM2
+	MOV	BL,BNUM2
 	CALL 	DUMP8
 ;
 ; preload registers with operands
@@ -183,11 +185,11 @@ BAD:	WRITE	BADOP		; write operator error message
 ; output result
 OUTPUT:
 	WRITE	BRESULT
-	CALL	DUMP8
+	MOV	BX,RESULT
+	CALL	DUMP16
 	WRITE	ARESULT
 	MOV	AX,RESULT
-	MOV	AH,0
-	CALL	B2A8
+	CALL	B2A16
 	WRITE	ANSWER
 	
 ALLDONE:	EXIT		; clean exit
@@ -230,40 +232,56 @@ DONE:	MOV	AL,BH		; move result to output register
 ;
 ;************************************************************
 ;
-;*** Subroutine B2A8 ****************************************
+;*** Subroutine B2A16 ****************************************
 ;
-;	A subroutine to convert an 8-bit binary number to
-;	its corresponding 8-bit ASCII value
+;	A subroutine to convert a 16-bit binary number to
+;	its corresponding ASCII value
 ;
 ;	Note: Does not perform error checking
 ;
-;	ENTRY: AL holds 8-bit value to convert
+;	ENTRY: AX holds 16-bit value to convert
 ;	       SI points to ASCII save buffer
 ;	       CX used as a counter
 ;	EXIT:  none
 ;
-B2A8:
+B2A16:
 	MOV	CX,0
-HUND:	SUB	AL,100
+TNTHOU:	SUB	AX,10000
+	JC	THOU
+	INC	CX
+	JMP	TNTHOU
+THOU:	MOV	[SI],CL
+	ADD	AX,10000
+	MOV	CX,0
+THOU1:	SUB	AX,1000
+	JC	HUND
+	INC	CX
+	JMP	THOU1
+HUND:	MOV	[SI+1],CL
+	ADD	AX,1000
+	MOV	CX,0
+HUND1:	SUB	Ax,100
 	JC	TENs
 	INC	CX
 	JMP	HUND
-TENS:	MOV	[DI],CL
+TENS:	MOV	[SI+2],CL
 	ADD	AL,100
 	MOV	CX,0
 TENS1:	SUB	AL,10
 	JC	UNITS
 	INC	CX
 	JMP	TENS1
-UNITS:	MOV	[SI+1],CL
+UNITS:	MOV	[SI+3],CL
 	ADD	AL,10
-	MOV	[SI+2],AL
+	MOV	[SI+4],AL
 	ADD	B[SI],30H
 	ADD	B[SI+1],30H
 	ADD	B[SI+2],30H
-	ADD	B[SI+3],EOT
+	ADD	B[SI+3],30H
+	ADD	B[SI+4],30H
+	ADD	B[SI+5],EOT
 
-;MOV	BX,10000
+;	MOV	BX,10000
 ;	DIV	BX
 ;	MOV	[SI],AL
 ;	MOV	AX,DX
@@ -285,8 +303,8 @@ UNITS:	MOV	[SI+1],CL
 ;	ADD	B[SI+3],30H
 ;	ADD	B[SI+4],30H
 ;	ADD	B[SI+5],EOT
-	RET			; return to caller
-
+;	RET			; return to caller
+;
 ;************************************************************
 ;
 ;*** Subroutine ADDTHEM *************************************
@@ -330,24 +348,35 @@ ADDTHEM:
 ;
 ;	Note: Does not perform error checking
 ;
-;	ENTRY: AL holds binary value to output; CX used as
-;	       character counter; BL used as working register
-;	EXIT:  None
+;	ENTRY:	BL holds binary value to output
+;	EXIT:	BL destroyed
+;	USED:	AX and DL for output; CX for loop counters
 ;
 DUMP8:
-	MOV	BL,AL		; copy binary value to working register
-	MOV	CX,8		; initialize loop counter
-SHIFT_8:
+	MOV	CH,2		; set group counter
+GROUP8:	
+	MOV	CL,4		; set bit counter
+PROBIT8:	
 	SHL	BL,1		; shift bits left by 1
-	JC	PRT1_8		; bit shifted out = 1; jump to P1
-	MOV	DL,'0'		; bit shifted out = 0; print it
+	JC	P1_8		; bit shifted out = 1, jump to P1
+	MOV	DL,'0'		; bit shifted out = 0, print it
+	MOV	AH,02H		;
+	INT	21H
+	DEC	CL		; decrement bit counter
+	JNZ	PROBIT8		; more bits to print, process next bit
+	JZ	BREAK8		; 4 bits printed, add space
+P1_8:	
+	MOV	DL,'1'		; print '1'
 	MOV	AH,02H		;
 	INT	21H		;
-	JMP	NEXT_8		; process the next number
-PRT1_8:	MOV	DL,'1'		; print '1'
-	MOV	AH,02H		;
-	INT	21H		;
-NEXT_8:	LOOP	SHIFT_8		; more characters? repeat
+	DEC	CL		; decrement bit counter
+	JNZ	PROBIT8		; more bits to print; process next bit
+BREAK8:	
+	MOV	DL,' '		; print space
+	MOV	AH,02H
+	INT	21H
+	DEC	CH		; decrement group counter
+	JNZ	GROUP8		; more bits to output
 	RET			; return to caller
 ;
 ;***********************************************************
@@ -355,28 +384,39 @@ NEXT_8:	LOOP	SHIFT_8		; more characters? repeat
 ;*** Subroutine DUMP16 *************************************
 ;
 ;	A subroutine to output the 16-bit binary equivalent of a
-;	value in memory
+;	value in memory in 4-bit groups for ease of reading
 ;
 ;	Note: Does not perform error checking
 ;
-;	ENTRY: AX holds binary value to output; CX used as
-;	       character counter; BX used as working register
-;	EXIT:  None
+;	ENTRY:	BX holds binary value to output
+;	EXIT: 	BX destroyed
+;	USED:	AX and DL for output; CX for loop counters
 ;
 DUMP16:
-	MOV	BX,AX		; copy binary value to working register
-	MOV	CX,16		; initialize loop counter
-SHIFT_16:
+	MOV	CH,4		; set group counter
+GROUP16:
+	MOV	CL,4		; set bit counter
+PROBIT16:
 	SHL	BX,1		; shift bits left by 1
-	JC	PRT1_16		; bit shifted out = 1; jump to P1
-	MOV	DL,'0'		; bit shifted out = 0; print it
-	MOV	AH,02H		;
-	INT	21H		;
-	JMP	NEXT_16		; process the next number
-PRT1_16:MOV	DL,'1'		; print '1'
-	MOV	AH,02H		;
-	INT	21H		;
-NEXT_16:LOOP	SHIFT_16	; more characters? repeat
+	JC	P1_16		; bit shifted out = 1, jump to P1
+	MOV	DL,'0'		; bit shifted out = 0, print it
+	MOV	AH,02H
+	INT	21H
+	DEC	CL		; decrement bit counter
+	JNZ	PROBIT16	; more bits to print, process next bit
+	JZ	BREAK16		; 4 bits printed, add space
+P1_16:
+	MOV	DL,'1'		; print '1'
+	MOV	AH,02H
+	INT	21H
+	DEC	CL		; decrement bit counter
+	JNZ	PROBIT16	; more bits to print, process next bit
+BREAK16:
+	MOV	DL,' '		; print space
+	MOV	AH,02H
+	INT	21H
+	DEC	CH		; decrement group counter
+	JNZ	GROUP16		; more bits to output
 	RET			; return to caller
 ;
 ;***********************************************************
