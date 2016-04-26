@@ -1,0 +1,473 @@
+A86 V4.04 assembly of wolfp5.COM                              2016-04-26  15:29
+: WolfProgram5                                                Page 1
+Source: wolfp5.asm                                          
+
+  Begin Source: wolfp5.asm
+    1                                     TITLE: WolfProgram5
+    2                                     PAGE 60, 132
+    3                             ;
+    4                             ;       ** Cheap Calculator **
+    5                             ;       Simple 4-function calculator wihch will perform addition,
+    6                             ;       subtraction, multiplication, and division of 2 unsigned values
+    7                             ;       less than or equal to 255 each. The user enters a simple equation
+    8                             ;       in the form operand operator operand, and the program will
+    9                             ;       evaluate it then output the result in ASCII characters.
+   10                             ;
+   11                             ;       Jay Wolf - May 10, 2016
+   12                             ;
+   13                             ;       Define constants
+   14                             ;
+   15 = : 000D                    CR      EQU     0DH             ; define carriage return
+   16 = : 000A                    LF      EQU     0AH             ; define line feed
+   17 = : 0024                    EOT     EQU     '$'             ; define end of text character
+   18 = : 0020                    SPACE   EQU     ' '             ; define space
+   19                             ;
+   20                             ;       Define macros
+   21                             ;
+   22                             WRITE   MACRO
+   23                                     LEA     DX,#1
+   24                                     MOV     AH,09H
+   25                                     INT     21H
+   26                                     #EM
+   27                             WRITEC  MACRO
+   28                                     MOV     DL,#1
+   29                                     MOV     AH,02H
+   30                                     INT     21H
+   31                                     #EM
+   32                             READ    MACRO
+   33                                     LEA     DX,#1
+   34                                     MOV     AH,0AH
+   35                                     INT     21H
+   36                                     #EM
+   37                             EXIT    MACRO
+   38                                     MOV     AX,4C00H
+   39                                     INT     21H
+   40                                     #EM
+   41                             ;
+   42 0100  E9 AE 02                      JMP     START           ; bypass variable definitions
+   43                             ;
+   44                             ;       Define variables
+   45                             ;
+   46 0103  0A 00 00 00 00 00     INBUF   DB      10,?,10 DUP ?   ; define input buffer
+   47 010F  00 00 00 00           ANUM1   DB      4 DUP 0         ; ASCII version of 1st number
+   48 0113  00 00 00 00           ANUM2   DB      4 DUP 0         ; ASCII version of 2nd number
+   49 0117  00 00 00 00           BNUM1   DB      4 DUP 0         ; Binary version of 1st number
+   50 011B  00 00 00 00           BNUM2   DB      4 DUP 0         ; Binary version of 2nd number
+   51 011F  00                    OP      DB      0               ; operator
+   52 0120  0D 0A 20 49 6E 76     BADOP   DB      CR,LF," Invalid operand.",CR,LF,EOT
+   53 0136  00 00                 RESULT  DW      0               ; Binary result
+   54 0138  00                    ISNEG   DB      0               ; Stable negative result flag
+A86 V4.04 assembly of wolfp5.COM                                                                                   2016-04-26  15:29
+: WolfProgram5                                                                                                     Page 2
+Source: wolfp5.asm                                          
+
+   55 0139  00                    BQUO    DB      0               ; Binary quotent for division
+   56 013A  00                    BREM    DB      0               ; Binary remainder for division
+   57 013B  00 00 00 00 00 00     PRNTNUM1 DB     6 DUP 0         ; ASCII version of 1st number
+   58 0141  00 00 00 00 00 00     PRNTNUM2 DB     6 DUP 0         ; ASCII version of 2nd number
+   59 0147  00 00 00 00 00 00     ANSWER  DB      6 DUP 0         ; ASCII version of result
+   60 014D  00 00 00 00 00 00     REMAIN  DB      6 DUP 0         ; ASCII version of division remainder
+   61 0153  20 72 20 24           DIVREM  DB      " r ",EOT
+   62 0157  20 3D 20 24           EQUALS  DB      " = ",EOT
+   63 015B  0D 0A 0A 20 54 68     OUTMSG  DB      CR,LF,LF," That's easy! ",EOT
+   64 016D  0D 0A 2A 2A 2A 2A     HEADER  DB      CR,LF,"**********  Cheap Calculator  ************************************",CR,LF,L
+      0173  2A 2A 2A 2A 2A 2A          F
+   65 01B4  20 49 20 61 6D 20             DB      " I am a cheap, 8-bit calculator. I can add, subtract, multiply,",CR,LF
+   66 01F5  20 6F 72 20 64 69             DB      " or divide, but there are some limitations so pay attention.",CR,LF,LF
+   67 0234  20 31 29 20 49 20             DB      " 1) I can only handle numbers 255 or smaller.",CR,LF
+   68 0263  20 32 29 20 49 20             DB      " 2) I can only read expressions if they're written a specific way.",CR,LF
+   69 02A7  20 20 20 20 45 6E             DB      "    Enter your first number, a space, the operator, another space,",CR,LF
+   70 02EB  20 20 20 20 74 68             DB      "    then the second number (NUM OP NUM).",CR,LF
+   71 0315  20 20 20 20 49 74             DB      "    It should look something like this -> 25 + 100",CR,LF,LF
+   72 034A  20 47 6F 74 20 69             DB      " Got it? Enter your equation: ",EOT
+   73 0369  0D 0A 0A 2A 2A 2A     FOOTER  DB      CR,LF,LF,"******************************************************************",CR,L
+      036F  2A 2A 2A 2A 2A 2A          F,EOT
+   74                             ;
+   75                             ;
+   76                             START:
+   77 03B1  BA 6D 01 B4 09 CD             WRITE   HEADER          ; write rules & prompt user for equation
+   78 03B8  BA 03 01 B4 0A CD             READ    INBUF           ; read input from user
+   79                             ;
+   80                             ; build 1st ASCII number
+   81 03BF  BF 05 01                      LEA     DI,INBUF+2      ; point to the user's input
+   82 03C2  B1 00                         MOV     CL,0            ; initialize character counter to 0
+   83                             EON1:
+   84 03C4  80 3D 20                      CMP     B[DI],SPACE     ; @ space?
+   85 03C7  74 05                         JE      BUILDN1         ; found end of NUM1
+   86 03C9  47                            INC     DI              ; not space, increment pointer
+   87 03CA  FE C1                         INC     CL              ; increment character counter
+   88 03CC  EB F6                         JMP     EON1            ; repeat
+   89                             BUILDN1:
+   90 03CE  89 FB                         MOV     BX,DI           ; save pointer location
+   91 03D0  BE 12 01                      LEA     SI,ANUM1+3      ; point to last character in ANUM1
+   92 03D3  C6 04 24                      MOV     B[SI],EOT       ; add EOT to ASCII number
+   93 03D6  4E                    BN1:    DEC     SI              ; decrement ANUM1 pointer
+   94 03D7  4F                            DEC     DI              ; decrement INBUF pointer
+   95 03D8  FE C9                         DEC     CL              ; decrement character counter
+   96 03DA  8A 05                         MOV     AL,B[DI]        ; move 1's digit from INBUF to ANUM1
+   97 03DC  88 04                         MOV     B[SI],AL        ;
+   98 03DE  80 F9 00                      CMP     CL,0            ; any more characters to add?
+   99 03E1  75 F3                         JNE     BN1             ; add another digit
+  100                             ;
+  101                             ; no more digits to add; save operator
+  102 03E3  89 DF                         LEA     DI,BX           ; reset input pointer to 1st SPACE in input
+  103 03E5  47                            INC     DI              ; increment INBUF pointer
+  104 03E6  8A 05                         MOV     AL,B[DI]        ; save character as operator
+  105 03E8  A2 1F 01                      MOV     OP,AL           ;
+  106                             ;
+  107                             ; build 2nd ASCII number
+A86 V4.04 assembly of wolfp5.COM                                                                                   2016-04-26  15:29
+: WolfProgram5                                                                                                     Page 3
+Source: wolfp5.asm                                          
+
+  108 03EB  83 C7 02                      ADD     DI,2            ; increment INBUF pointer 2x
+  109 03EE  B1 00                         MOV     CL,0            ; reset character count to 0
+  110                             EON2:
+  111 03F0  80 3D 0D                      CMP     B[DI],CR        ; @ CR?
+  112 03F3  74 05                         JE      BUILDN2         ; found end of NUM2
+  113 03F5  47                            INC     DI              ; not end, increment pointer
+  114 03F6  FE C1                         INC     CL              ; increment character counter
+  115 03F8  EB F6                         JMP     EON2            ; repeat
+  116                             BUILDN2:
+  117 03FA  89 FB                         MOV     BX,DI           ; save pointer location
+  118 03FC  BE 16 01                      LEA     SI,ANUM2+3      ; point to last character in NUM2
+  119 03FF  C6 04 24                      MOV     B[SI],EOT       ; add EOT to ASCII number
+  120 0402  4E                    BN2:    DEC     SI              ; decrement NUM2 pointer
+  121 0403  4F                            DEC     DI              ; decrement INBUF pointer
+  122 0404  FE C9                         DEC     CL              ; decrement character counter
+  123 0406  8A 05                         MOV     AL,B[DI]        ; move 1's digit from INBUF to NUM2
+  124 0408  88 04                         MOV     B[SI],AL        ;
+  125 040A  80 F9 00                      CMP     CL,0            ; any more characters to add?
+  126 040D  75 F3                         JNE     BN2             ; add another digit
+  127                             ;
+  128                             ; no more digits to add
+  129 040F  89 DF                         LEA     DI,BX           ; reset input pointer to end of INBUF
+  130                             ;
+  131                             ; convert values to binary
+  132 0411  BE 0F 01                      LEA     SI,ANUM1        ; point to ANUM1
+  133 0414  E8 42 01                      CALL    A2B8            ; convert ANUM1 to binary
+  134 0417  A2 17 01                      MOV     BNUM1,AL        ; save result as BNUM1
+  135                             
+  136 041A  BE 13 01                      LEA     SI,ANUM2        ; point to ANUM2
+  137 041D  E8 39 01                      CALL    A2B8            ; convert ANUM2 to binary
+  138 0420  A2 1B 01                      MOV     BNUM2,AL        ; save result as BNUM2
+  139                             ;
+  140                             ; preload registers with operands
+  141 0423  A0 17 01                      MOV     AL,BNUM1        ; move 1st operand to register
+  142 0426  8A 26 1B 01                   MOV     AH,BNUM2        ; move 2nd operand to register
+  143 042A  BE 47 01                      LEA     SI,ANSWER       ; point to ASCII answer
+  144                             ;
+  145                             ; process equation based on operand
+  146 042D  80 3E 1F 01 2B                CMP     [OP],'+'        ; look for add
+  147 0432  75 09                         JNE     SUB?            ; not add, look for subtraction
+  148 0434  E8 A1 01                      CALL    ADDTHEM         ; add operands
+  149 0437  A3 36 01                      MOV     RESULT,AX       ; save binary result
+  150 043A  E9 49 00                      JMP     OUTPUT          ; output result
+  151 043D  80 3E 1F 01 2D        SUB?:   CMP     [OP], '-'       ; look for subtract
+  152 0442  75 12                         JNE     MUL?            ; not subtract, look for multiply
+  153 0444  E8 99 01                      CALL    SUBTHEM         ; subtract operands
+  154 0447  A3 36 01                      MOV     RESULT,AX       ; save binary result
+  155 044A  8A 2E 38 01                   MOV     CH,ISNEG        ; save negative flag
+  156 044E  C6 06 38 01 00                MOV     ISNEG,0         ; reset negative flag
+  157 0453  E9 30 00                      JMP     OUTPUT          ; output result
+  158 0456  80 3E 1F 01 2A        MUL?:   CMP     [OP],'*'        ; look for multiply
+  159 045B  75 09                         JNE     DIV?            ; not multiply, look for divide
+  160 045D  E8 8E 01                      CALL    MULTHEM         ; multiply operands
+  161 0460  A3 36 01                      MOV     RESULT,AX       ; save binary result
+  162 0463  E9 20 00                      JMP     OUTPUT          ; write result
+A86 V4.04 assembly of wolfp5.COM                                                                                   2016-04-26  15:29
+: WolfProgram5                                                                                                     Page 4
+Source: wolfp5.asm                                          
+
+  163 0466  80 3E 1F 01 2F        DIV?:   CMP     [OP],'/'        ; look for divide
+  164 046B  75 0D                         JNE     BAD             ; not divide, must be bad operator
+  165 046D  E8 81 01                      CALL    DIVTHEM         ; divide operands
+  166 0470  A2 39 01                      MOV     BQUO,AL         ; save binary quotent
+  167 0473  88 26 3A 01                   MOV     BREM,AH         ; save binary remainder
+  168 0477  E9 66 00                      JMP     OUTDIV          ; output result
+  169 047A  BA 20 01 B4 09 CD     BAD:    WRITE   BADOP           ; write operator error message
+  170 0481  B8 00 4C CD 21                EXIT                    ; clean exit
+  171                             ;
+  172                             ; output result
+  173                             OUTPUT:
+  174 0486  BA 5B 01 B4 09 CD             WRITE   OUTMSG
+  175 048D  A0 17 01                      MOV     AL,BNUM1        ; load binary number 1
+  176 0490  B4 00                         MOV     AH,0            ; reset upper 8 bits of AX
+  177 0492  BE 3B 01                      LEA     SI,PRNTNUM1     ; point to number buffer
+  178 0495  E8 F7 00                      CALL    B2A16           ; convert to ASCII
+  179 0498  BE 3B 01                      LEA     SI,PRNTNUM1     ; point to ASCII number
+  180 049B  E8 5A 01                      CALL    PRNTTHEM        ; print number w/o leading zeros
+  181 049E  B2 20 B4 02 CD 21             WRITEC  SPACE
+  182                             
+  183 04A4  8A 16 1F 01 B4 02             WRITEC  OP              ; print operator
+  184 04AC  B2 20 B4 02 CD 21             WRITEC  SPACE
+  185                             
+  186 04B2  A0 1B 01                      MOV     AL,BNUM2        ; load binary number 2
+  187 04B5  B4 00                         MOV     AH,0            ; reset upper 8 bits of AX
+  188 04B7  BE 41 01                      LEA     SI,PRNTNUM2     ; point to number buffer
+  189 04BA  E8 D2 00                      CALL    B2A16           ; convert to ASCII
+  190 04BD  BE 41 01                      LEA     SI,PRNTNUM2     ; point to ASCII number
+  191 04C0  E8 35 01                      CALL    PRNTTHEM        ; print w/o leading zeros
+  192                             
+  193 04C3  BA 57 01 B4 09 CD             WRITE   EQUALS          ; print '='
+  194                             
+  195 04CA  A1 36 01                      MOV     AX,RESULT       ; load binary result
+  196 04CD  88 2E 38 01                   MOV     ISNEG,CH        ; restore negative flag
+  197 04D1  BE 47 01                      LEA     SI,ANSWER       ; point to answer buffer
+  198 04D4  E8 B8 00                      CALL    B2A16           ; convert to ASCII
+  199 04D7  BE 47 01                      LEA     SI,ANSWER       ; point to ASCII answer
+  200 04DA  E8 1B 01                      CALL    PRNTTHEM        ; print answer w/o leading zeros
+  201 04DD  E9 6D 00                      JMP     ALLDONE         ; done, exit program
+  202                             
+  203                             OUTDIV:
+  204 04E0  BA 5B 01 B4 09 CD             WRITE   OUTMSG
+  205 04E7  A0 17 01                      MOV     AL,BNUM1        ; load binary number 1
+  206 04EA  B4 00                         MOV     AH,0            ; reset upper 8 bits of AX
+  207 04EC  BE 3B 01                      LEA     SI,PRNTNUM1     ; point to number buffer
+  208 04EF  E8 9D 00                      CALL    B2A16           ; convert to ASCII
+  209 04F2  BE 3B 01                      LEA     SI,PRNTNUM1     ; point to ASCII number
+  210 04F5  E8 00 01                      CALL    PRNTTHEM        ; print number w/o leading zeros
+  211 04F8  B2 20 B4 02 CD 21             WRITEC  SPACE
+  212                             
+  213 04FE  8A 16 1F 01 B4 02             WRITEC  OP              ; print operator
+  214 0506  B2 20 B4 02 CD 21             WRITEC  SPACE
+A86 V4.04 assembly of wolfp5.COM                                                                                   2016-04-26  15:29
+: WolfProgram5                                                                                                     Page 5
+Source: wolfp5.asm                                          
+
+  216 050C  B4 00                         MOV     AH,0            ; reset upper 8 bits of AX
+  217 050E  A0 1B 01                      MOV     AL,BNUM2        ; load binary number 2
+  218 0511  BE 41 01                      LEA     SI,PRNTNUM2     ; point to number buffer
+  219 0514  E8 78 00                      CALL    B2A16           ; convert to ASCII
+  220 0517  BE 41 01                      LEA     SI,PRNTNUM2     ; point to ASCII number
+  221 051A  E8 DB 00                      CALL    PRNTTHEM        ; print w/o leading zeros
+  222                             
+  223 051D  BA 57 01 B4 09 CD             WRITE   EQUALS          ; print '='
+  224                             
+  225 0524  A0 39 01                      MOV     AL,BQUO         ; load binary quotent
+  226 0527  B4 00                         MOV     AH,0            ; clear upper 8 bits of AX
+  227 0529  BE 47 01                      LEA     SI,ANSWER       ; point to quotent buffer
+  228 052C  E8 60 00                      CALL    B2A16           ; convert quotent to ASCII
+  229 052F  BE 47 01                      LEA     SI,ANSWER       ; point to ASCII quotent
+  230 0532  E8 C3 00                      CALL    PRNTTHEM        ; print answer w/o leading zeros
+  231                             
+  232 0535  BA 53 01 B4 09 CD             WRITE   DIVREM          ; print 'r'
+  233                             
+  234 053C  A0 3A 01                      MOV     AL,BREM         ; load binary remainder
+  235 053F  B4 00                         MOV     AH,0            ; clear upper 8 bits of AX
+  236 0541  BE 4D 01                      LEA     SI,REMAIN       ; point to remainder buffer
+  237 0544  E8 48 00                      CALL    B2A16           ; convert remainder to ASCII
+  238 0547  BE 4D 01                      LEA     SI,REMAIN       ; point to ASCII remainder
+  239 054A  E8 AB 00                      CALL    PRNTTHEM        ; print answer w/o leading zeros
+  240                             
+  241                             ALLDONE:
+  242 054D  BA 69 03 B4 09 CD             WRITE   FOOTER
+  243 0554  B8 00 4C CD 21                EXIT                    ; clean exit
+  244                             ;
+  245                             ;*** Subroutine A2B8 ****************************************
+  246                             ;
+  247                             ;       A subroutine to convert a 3-digit ASCII value to
+  248                             ;       its corresponding Binary value
+  249                             ;
+  250                             ;       Note: Does not perform error checking
+  251                             ;
+  252                             ;       ENTRY: SI points to value; CH used as character counter
+  253                             ;              BX will be used to build binary number
+  254                             ;       EXIT:  AL holds binary value, original ASCII value maintained
+  255                             ;
+  256                             A2B8:
+  257 0559  83 C6 02                      ADD     SI,2            ; point to 1's place
+  258 055C  80 2C 30                      SUB     B[SI],30H       ; remove ASCII bias
+  259 055F  8A 3C                         MOV     BH,B[SI]        ; add 1's value to result
+  260 0561  80 04 30                      ADD     B[SI],30H       ; restore ASCII bias
+  261 0564  4E                            DEC     SI              ; decrement pointer to 10's byte
+  262 0565  80 3C 00                      CMP     B[SI],0         ; is character NULL? (0H)
+  263 0568  74 22                         JE      DONE            ; no more characters to convert
+A86 V4.04 assembly of wolfp5.COM                                                                                   2016-04-26  15:29
+: WolfProgram5                                                                                                     Page 6
+Source: wolfp5.asm                                          
+
+  265 056A  8A 1C                         MOV     BL,B[SI]        ; get 10's byte
+  266 056C  80 EB 30                      SUB     BL,30H          ; remove ASCII bias
+  267 056F  B0 0A                         MOV     AL,10           ; multiply by 10
+  268 0571  F6 E3                         MUL     BL              ;
+  269 0573  00 C7                         ADD     BH,AL           ; add 10's value to result
+  270 0575  80 04 30                      ADD     B[SI],30H       ; retore ASCII bias
+  271 0578  4E                            DEC     SI              ; decrement pointer to 100's byte
+  272 0579  80 3C 00                      CMP     B[SI],0         ; is character NULL? (0H)
+  273 057C  74 0E                         JE      DONE            ; no more characters to convert
+  274                             
+  275 057E  8A 1C                         MOV     BL,B[SI]        ; get 100's byte
+  276 0580  80 EB 30                      SUB     BL,30H          ; remove ASCII bias
+  277 0583  B0 64                         MOV     AL,100          ; multiply by 100
+  278 0585  F6 E3                         MUL     BL              ;
+  279 0587  00 C7                         ADD     BH,AL           ; add 100's value to result
+  280 0589  80 04 30                      ADD     B[SI],30H       ; restore ASCII bias
+  281 058C  8A C7                 DONE:   MOV     AL,BH           ; move result to output register
+  282 058E  C3                            RET                     ; return to caller
+  283                             ;
+  284                             ;************************************************************
+  285                             ;
+  286                             ;*** Subroutine B2A16 ****************************************
+  287                             ;
+  288                             ;       A subroutine to convert a 16-bit binary number to
+  289                             ;       its corresponding ASCII value
+  290                             ;
+  291                             ;       Note: Does not perform error checking
+  292                             ;
+  293                             ;       ENTRY:  AX holds 16-bit value to convert
+  294                             ;               SI points to ASCII save buffer
+  295                             ;       EXIT:   none
+  296                             ;       USED:   BX and DX for division operations
+  297                             ;
+  298                             B2A16:
+  299 058F  BA 00 00                      MOV     DX,0            ; reset remainder to 0
+  300 0592  BB 10 27                      MOV     BX,10000        ; load 10000 into denominator
+  301 0595  F7 F3                         DIV     BX              ; divide AX by BX
+  302 0597  05 30 30                      ADD     AX,3030H        ; add ASCII bias to result
+  303 059A  88 04                         MOV     [SI],AL         ; save result in 1st char of answer
+  304                             
+  305 059C  8B C2                         MOV     AX,DX           ; load remainder into numerator
+  306 059E  BA 00 00                      MOV     DX,0            ; reset remainder to 0
+  307 05A1  BB E8 03                      MOV     BX,1000         ; load 1000 into denominator
+  308 05A4  F7 F3                         DIV     BX              ; divide AX by BX
+  309 05A6  05 30 30                      ADD     AX,3030H        ; add ASCII bias to result
+  310 05A9  88 44 01                      MOV     [SI+1],AL       ; save result in 2nd char of answer
+  311                             
+  312 05AC  8B C2                         MOV     AX,DX           ; load remainder into numerator
+  313 05AE  BA 00 00                      MOV     DX,0            ; reset remainder to 0
+  314 05B1  BB 64 00                      MOV     BX,100          ; load 100 into denominator
+  315 05B4  F7 F3                         DIV     BX              ; divide AX by BX
+  316 05B6  05 30 30                      ADD     AX,3030H        ; add ASCII bias to result
+  317 05B9  88 44 02                      MOV     [SI+2],AL       ; save result in 3rd char of answer
+A86 V4.04 assembly of wolfp5.COM                                                                                   2016-04-26  15:29
+: WolfProgram5                                                                                                     Page 7
+Source: wolfp5.asm                                          
+
+  319 05BC  8B C2                         MOV     AX,DX           ; load remiander into numerator
+  320 05BE  BA 00 00                      MOV     DX,0            ; reset remainder to 0
+  321 05C1  BB 0A 00                      MOV     BX,10           ; load 10 into denominator
+  322 05C4  F7 F3                         DIV     BX              ; divide AX by BX
+  323 05C6  05 30 30                      ADD     AX,3030H        ; add ASCII bias to result
+  324 05C9  88 44 03                      MOV     [SI+3],AL       ; save result in 4th char of answer
+  325                             
+  326 05CC  81 C2 30 30                   ADD     DX,3030H        ; add ASCII bias to remainder
+  327 05D0  88 54 04                      MOV     [SI+4],DL       ; save result in 5th char of answer
+  328                             
+  329 05D3  80 44 05 24                   ADD     B[SI+5],EOT     ; add EOT to ASCII string
+  330 05D7  C3                            RET                     ; return to caller
+  331                             ;
+  332                             ;************************************************************
+  333                             ;
+  334                             ;*** Subroutine ADDTHEM *************************************
+  335                             ;
+  336                             ;       A subroutine to add 2 8-bit binary numbers
+  337                             ;
+  338                             ;       Note: Does not perform error checking
+  339                             ;
+  340                             ;       ENTRY:  AL holds first number; AH holds 2nd number;
+  341                             ;       EXIT:   AX holds binary result
+  342                             ;
+  343                             ADDTHEM:
+  344 05D8  02 C4                         ADD     AL,AH           ; result stored in AL
+  345 05DA  B4 00                         MOV     AH,0            ; reset upper 8-bits of AX register to 0
+  346 05DC  80 D4 00                      ADC     AH,0            ; move carry bit into upper 8-bits of AX
+  347 05DF  C3                            RET                     ; return to caller
+  348                             ;
+  349                             ;************************************************************
+  350                             ;
+  351                             ;*** Subroutine SUBTHEM *************************************
+  352                             ;
+  353                             ;       A subroutine to subtract 2 8-bit binary numbers
+  354                             ;
+  355                             ;       Note: Does not perform error checking
+  356                             ;
+  357                             ;       ENTRY:  AL holds first number; AH holds 2nd number
+  358                             ;       EXIT:   AX holds binary result
+  359                             ;
+  360                             SUBTHEM:
+  361 05E0  2A C4                         SUB     AL,AH           ; result stored in AX
+  362 05E2  B4 00                         MOV     AH,0            ; reset upper 8 bits of AX to 0
+  363 05E4  73 07                         JNC     ISPOS           ; result is a positive number
+  364 05E6  F6 D8                         NEG     AL              ; negate result, 2's complement
+  365 05E8  C6 06 38 01 01                MOV     ISNEG,1         ; set negative flag = true
+  366 05ED  C3                    ISPOS:  RET                     ; return to caller
+  367                             ;
+  368                             ;************************************************************
+  369                             ;
+  370                             ;*** Subroutine MULTHEM *************************************
+  371                             ;
+  372                             ;       A subroutine to multiply 2 8-bit binary numbers
+  373                             ;
+A86 V4.04 assembly of wolfp5.COM                                                                                   2016-04-26  15:29
+: WolfProgram5                                                                                                     Page 8
+Source: wolfp5.asm                                          
+
+  374                             ;       Note: Does not perform error checking
+  375                             ;
+  376                             ;       ENTRY:  AL holds first number; AH holds 2nd number;
+  377                             ;       EXIT:   AX holds binary result
+  378                             ;
+  379                             MULTHEM:
+  380 05EE  F6 E4                         MUL     AH              ; result stored in AX
+  381 05F0  C3                            RET                     ; return to caller
+  382                             ;
+  383                             ;************************************************************
+  384                             ;
+  385                             ;*** Subroutine DIVTHEM *************************************
+  386                             ;
+  387                             ;       A subroutine to divide 2 8-bit binary numbers
+  388                             ;
+  389                             ;       Note: Does not perform error checking
+  390                             ;
+  391                             ;       ENTRY:  AL holds numerator; AH holds denominator;
+  392                             ;               SI points to ASCII output buffer
+  393                             ;       EXIT:   AL holds binary quotient; AH holds binary remainder
+  394                             ;       USED:   BL for working register
+  395                             ;
+  396                             DIVTHEM:
+  397 05F1  8A DC                         MOV     BL,AH           ; move denominator to working register
+  398 05F3  B4 00                         MOV     AH,0            ; reset AH
+  399 05F5  F6 F3                         DIV     BL              ; result stored in AX
+  400 05F7  C3                            RET                     ; return to caller
+  401                             ;
+  402                             ;************************************************************
+  403                             ;
+  404                             ;*** Subroutine PRNTTHEM *************************************
+  405                             ;
+  406                             ;       A subroutine to suppress leading zeros in ASCII output
+  407                             ;
+  408                             ;       Note: Does not perform error checking
+  409                             ;
+  410                             ;       ENTRY:  SI points to ASCII buffer to output
+  411                             ;       EXIT:   none
+  412                             ;       USED:   DL for output, CL for counter
+  413                             ;
+  414                             PRNTTHEM:
+  415 05F8  B1 04                         MOV     CL,4            ; initialize counter
+  416 05FA  80 3E 38 01 01                CMP     ISNEG,1         ; is answer a negative number?
+  417 05FF  75 06                         JNE     ISZERO?         ; not negative, look for zero
+  418 0601  B2 2D B4 02 CD 21             WRITEC  '-'             ; is negative, print '-'
+  419                             ;       INC     SI              ; increment pointer
+  420                             ;       DEC     CL              ; decrement counter
+  421                             ISZERO?:
+  422 0607  80 3C 30                      CMP     B[SI],'0'       ; leading zero?
+  423 060A  75 05                         JNE     PRINTIT         ; not 0, print it
+  424 060C  46                            INC     SI              ; is 0, increment pointer
+  425 060D  FE C9                         DEC     CL              ; decrement counter
+  426 060F  75 F6                         JNZ     ISZERO?         ; more characters to process
+  427                             PRINTIT:
+  428 0611  8A 14 B4 02 CD 21             WRITEC  B[SI]           ; print character
+A86 V4.04 assembly of wolfp5.COM                                                                                   2016-04-26  15:29
+: WolfProgram5                                                                                                     Page 9
+Source: wolfp5.asm                                          
+
+  429 0617  46                            INC     SI              ; increment pointer
+  430 0618  80 3C 24                      CMP     B[SI],EOT       ; @ end of string?
+  431 061B  75 F4                         JNE     PRINTIT         ; more characters to process
+  432 061D  C3                            RET                     ; return to caller
+  433                             ;
+  434                             ;************************************************************
+  435                             ;
+  436                                     END                     ; end of program
+

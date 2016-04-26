@@ -1,7 +1,6 @@
 ## Ignore x86 Assembly support files, compiler, and debugger
 
 # Build results
-*.lst
 *.err
 *.old
 *.sym
