@@ -49,30 +49,29 @@ ANUM2	DB	4 DUP 0		; ASCII version of 2nd number
 BNUM1	DB	4 DUP 0		; Binary version of 1st number
 BNUM2	DB	4 DUP 0		; Binary version of 2nd number
 OP	DB	0		; operator
+BADOP	DB	CR,LF," Invalid operand.",CR,LF,EOT
 RESULT	DW	0		; Binary result
+ISNEG	DB	0		; Stable negative result flag
 BQUO	DB	0		; Binary quotent for division
-BREM	DB	0		; BInary remainder for division
-ANSWER	DB	7 DUP 0		; ASCII result for result
-REMAIN	DB	6 DUP 0		; ASCII result for division remainder
-HEADER	DB	CR,LF,"**********  Cheap Calculator  **********",CR,LF,LF
-	DB	"Enter your equation: ",EOT
-BADOP	DB	CR,LF,"Invalid operand.",CR,LF,EOT
+BREM	DB	0		; Binary remainder for division
+PRNTNUM1 DB	6 DUP 0		; ASCII version of 1st number
+PRNTNUM2 DB	6 DUP 0		; ASCII version of 2nd number
+ANSWER	DB	6 DUP 0		; ASCII version of result
+REMAIN	DB	6 DUP 0		; ASCII version of division remainder
 DIVREM	DB	" r ",EOT
+EQUALS	DB	" = ",EOT
+OUTMSG	DB	CR,LF,LF," That's easy! ",EOT
+HEADER	DB	CR,LF,"**********  Cheap Calculator  ************************************",CR,LF,LF
+	DB	" I am a cheap, 8-bit calculator. I can add, subtract, multiply,",CR,LF
+	DB	" or divide, but there are some limitations so pay attention.",CR,LF,LF
+	DB	" 1) I can only handle numbers 255 or smaller.",CR,LF
+	DB	" 2) I can only read expressions if they're written a specific way.",CR,LF
+	DB	"    Enter your first number, a space, the operator, another space,",CR,LF
+	DB	"    then the second number (NUM OP NUM).",CR,LF
+	DB	"    It should look something like this -> 25 + 100",CR,LF,LF
+	DB	" Got it? Enter your equation: ",EOT
+FOOTER	DB	CR,LF,LF,"******************************************************************",CR,LF,EOT
 ;
-;	Testing Variables
-;
-AN1HDR	DB	CR,LF,"    ANUM1: ",EOT
-OPHDR	DB	CR,LF,"       OP: ",EOT
-AN2HDR	DB	CR,LF,"    ANUM2: ",EOT	
-BN1HDR	DB	CR,LF,"    BNUM1: ",EOT
-BN2HDR	DB	CR,LF,"    BNUM2: ",EOT
-BRESULT	DB	CR,LF,"   RESULT: ",EOT
-ARESULT	DB	CR,LF,"   ANSWER: ",EOT
-CLEANANS DB	CR,LF,"CLEAN ANS: ",EOT
-ALEQU	DB	CR,LF,"	      AL: ",EOT
-AHEQU	DB	CR,LF,"	      AH: ",EOT
-BQUOHDR	DB	CR,LF,"  QUOTENT: ",EOT
-BREMHDR	DB	CR,LF,"REMAINDER: ",EOT
 ;
 START:
 	WRITE	HEADER		; write rules & prompt user for equation
@@ -84,17 +83,17 @@ START:
 EON1:	
 	CMP	B[DI],SPACE	; @ space?
 	JE	BUILDN1		; found end of NUM1
-	INC	DI		; not end, increment pointer
+	INC	DI		; not space, increment pointer
 	INC	CL		; increment character counter
 	JMP	EON1		; repeat
 BUILDN1:	
 	MOV	BX,DI		; save pointer location
-	LEA	SI,ANUM1+3	; point to last character in NUM1
+	LEA	SI,ANUM1+3	; point to last character in ANUM1
 	MOV	B[SI],EOT	; add EOT to ASCII number
-BN1:	DEC	SI		; decrement NUM1 pointer
+BN1:	DEC	SI		; decrement ANUM1 pointer
 	DEC	DI		; decrement INBUF pointer
 	DEC	CL		; decrement character counter
-	MOV	AL,B[DI]	; move 1's digit from INBUF to NUM1
+	MOV	AL,B[DI]	; move 1's digit from INBUF to ANUM1
 	MOV	B[SI],AL	;
 	CMP	CL,0		; any more characters to add?
 	JNE	BN1		; add another digit
@@ -129,14 +128,6 @@ BN2:	DEC	SI		; decrement NUM2 pointer
 ; no more digits to add
 	LEA	DI,BX		; reset input pointer to end of INBUF
 ;
-; write values to screen
-	WRITE	AN1HDR
-	WRITE	ANUM1
-	WRITE	OPHDR
-	WRITEC	OP
-	WRITE	AN2HDR
-	WRITE	ANUM2
-;
 ; convert values to binary
 	LEA	SI,ANUM1	; point to ANUM1
 	CALL	A2B8		; convert ANUM1 to binary
@@ -145,14 +136,6 @@ BN2:	DEC	SI		; decrement NUM2 pointer
 	LEA	SI,ANUM2	; point to ANUM2
 	CALL	A2B8		; convert ANUM2 to binary
 	MOV	BNUM2,AL	; save result as BNUM2
-;
-; write values to screen
-	WRITE	BN1HDR
-	MOV	BL,BNUM1
-	CALL	DUMP8
-	WRITE	BN2HDR
-	MOV	BL,BNUM2
-	CALL 	DUMP8
 ;
 ; preload registers with operands
 	MOV	AL,BNUM1	; move 1st operand to register
@@ -169,6 +152,8 @@ SUB?:	CMP	[OP], '-'	; look for subtract
 	JNE	MUL?		; not subtract, look for multiply
 	CALL	SUBTHEM		; subtract operands
 	MOV	RESULT,AX	; save binary result
+	MOV	CH,ISNEG	; save negative flag
+	MOV	ISNEG,0		; reset negative flag
 	JMP	OUTPUT		; output result
 MUL?:	CMP	[OP],'*'	; look for multiply
 	JNE	DIV?		; not multiply, look for divide
@@ -186,51 +171,75 @@ BAD:	WRITE	BADOP		; write operator error message
 ;
 ; output result
 OUTPUT:
-	WRITE	BRESULT
-	MOV	BX,RESULT
-	CALL	DUMP16
-	
-	WRITE	ARESULT
-	MOV	AX,RESULT
-	CALL	B2A16
-	WRITE	ANSWER
+	WRITE	OUTMSG
+	MOV	AL,BNUM1	; load binary number 1
+	MOV	AH,0		; reset upper 8 bits of AX
+	LEA	SI,PRNTNUM1	; point to number buffer
+	CALL	B2A16		; convert to ASCII
+	LEA	SI,PRNTNUM1	; point to ASCII number
+	CALL	PRNTTHEM	; print number w/o leading zeros
+	WRITEC	SPACE
 
-	WRITE	CLEANANS
-	LEA	SI,ANSWER
-	CALL	PRNTTHEM
-	JMP	ALLDONE
+	WRITEC	OP		; print operator
+	WRITEC	SPACE
+
+	MOV	AL,BNUM2	; load binary number 2
+	MOV	AH,0		; reset upper 8 bits of AX
+	LEA	SI,PRNTNUM2	; point to number buffer
+	CALL	B2A16		; convert to ASCII
+	LEA	SI,PRNTNUM2	; point to ASCII number
+	CALL	PRNTTHEM	; print w/o leading zeros
+
+	WRITE	EQUALS		; print '='
+
+	MOV	AX,RESULT	; load binary result
+	MOV	ISNEG,CH	; restore negative flag
+	LEA	SI,ANSWER	; point to answer buffer
+	CALL	B2A16		; convert to ASCII
+	LEA	SI,ANSWER	; point to ASCII answer
+	CALL	PRNTTHEM	; print answer w/o leading zeros
+	JMP	ALLDONE		; done, exit program
 
 OUTDIV:
-	WRITE	BQUOHDR
-	MOV	BL,BQUO
-	CALL	DUMP8
-	
-	WRITE	BREMHDR
-	MOV	BL,BREM
-	CALL	DUMP8
+	WRITE	OUTMSG
+	MOV	AL,BNUM1	; load binary number 1
+	MOV	AH,0		; reset upper 8 bits of AX
+	LEA	SI,PRNTNUM1	; point to number buffer
+	CALL	B2A16		; convert to ASCII
+	LEA	SI,PRNTNUM1	; point to ASCII number
+	CALL	PRNTTHEM	; print number w/o leading zeros
+	WRITEC	SPACE
 
-	WRITE	ARESULT
-	MOV	AL,BQUO
-	MOV	AH,0
-	CALL	B2A16
-	WRITE	ANSWER
+	WRITEC	OP		; print operator
+	WRITEC	SPACE
 
-	WRITE	DIVREM
-	LEA	SI,REMAIN
-	MOV	AL,BREM
-	MOV	AH,0
-	CALL	B2A16
-	WRITE	REMAIN
+	MOV	AH,0		; reset upper 8 bits of AX
+	MOV	AL,BNUM2	; load binary number 2
+	LEA	SI,PRNTNUM2	; point to number buffer
+	CALL	B2A16		; convert to ASCII
+	LEA	SI,PRNTNUM2	; point to ASCII number
+	CALL	PRNTTHEM	; print w/o leading zeros
 
-	WRITE	CLEANANS
-	LEA	SI,ANSWER
-	CALL	PRNTTHEM
+	WRITE	EQUALS		; print '='
 
-	WRITE	DIVREM
-	LEA	SI,REMAIN
-	CALL	PRNTTHEM
-	
+	MOV	AL,BQUO		; load binary quotent
+	MOV	AH,0		; clear upper 8 bits of AX
+	LEA	SI,ANSWER	; point to quotent buffer
+	CALL	B2A16		; convert quotent to ASCII
+	LEA	SI,ANSWER	; point to ASCII quotent
+	CALL	PRNTTHEM	; print answer w/o leading zeros
+
+	WRITE	DIVREM		; print 'r'
+
+	MOV	AL,BREM		; load binary remainder
+	MOV	AH,0		; clear upper 8 bits of AX
+	LEA	SI,REMAIN	; point to remainder buffer
+	CALL	B2A16		; convert remainder to ASCII
+	LEA	SI,REMAIN	; point to ASCII remainder
+	CALL	PRNTTHEM	; print answer w/o leading zeros
+
 ALLDONE:
+	WRITE	FOOTER
 	EXIT			; clean exit
 ;
 ;*** Subroutine A2B8 ****************************************
@@ -242,12 +251,13 @@ ALLDONE:
 ;
 ;	ENTRY: SI points to value; CH used as character counter
 ;	       BX will be used to build binary number
-;	EXIT:  AL holds binary value
+;	EXIT:  AL holds binary value, original ASCII value maintained
 ;
 A2B8:
 	ADD	SI,2		; point to 1's place
 	SUB	B[SI],30H	; remove ASCII bias
 	MOV	BH,B[SI]	; add 1's value to result
+	ADD	B[SI],30H	; restore ASCII bias
 	DEC	SI		; decrement pointer to 10's byte
 	CMP	B[SI],0		; is character NULL? (0H)
 	JE	DONE		; no more characters to convert
@@ -257,6 +267,7 @@ A2B8:
 	MOV	AL,10		; multiply by 10
 	MUL	BL		;
 	ADD	BH,AL		; add 10's value to result
+	ADD	B[SI],30H	; retore ASCII bias
 	DEC	SI		; decrement pointer to 100's byte
 	CMP	B[SI],0		; is character NULL? (0H)
 	JE	DONE		; no more characters to convert
@@ -266,6 +277,7 @@ A2B8:
 	MOV	AL,100		; multiply by 100
 	MUL	BL		;
 	ADD	BH,AL		; add 100's value to result
+	ADD	B[SI],30H	; restore ASCII bias
 DONE:	MOV	AL,BH		; move result to output register
 	RET			; return to caller
 ;
@@ -281,7 +293,7 @@ DONE:	MOV	AL,BH		; move result to output register
 ;	ENTRY:	AX holds 16-bit value to convert
 ;		SI points to ASCII save buffer
 ;	EXIT:	none
-;	USED:	CX as a counter; DX for division operations
+;	USED:	BX and DX for division operations
 ;
 B2A16:
 	MOV	DX,0		; reset remainder to 0
@@ -325,9 +337,8 @@ B2A16:
 ;
 ;	Note: Does not perform error checking
 ;
-;	ENTRY: AL holds first number; AH holds 2nd number;
-;	       SI points to ASCII output buffer
-;	EXIT:  AX holds binary result
+;	ENTRY:	AL holds first number; AH holds 2nd number;
+;	EXIT:	AX holds binary result
 ;
 ADDTHEM:
 	ADD	AL,AH		; result stored in AL
@@ -343,18 +354,16 @@ ADDTHEM:
 ;
 ;	Note: Does not perform error checking
 ;
-;	ENTRY: AL holds first number; AH holds 2nd number;
-;	       SI points to ASCII output buffer
-;	EXIT:  AX holds binary result
+;	ENTRY:	AL holds first number; AH holds 2nd number
+;	EXIT:	AX holds binary result
 ;
 SUBTHEM:
 	SUB	AL,AH		; result stored in AX
 	MOV	AH,0		; reset upper 8 bits of AX to 0
-	JNC	POSNUM		; result is a positive number
-	NEG	AL		; negate result (2's complement)
-	MOV	B[SI],'-'	; add '-' to output
-	INC	SI		; increment answer pointer
-POSNUM:	RET			; return to caller
+	JNC	ISPOS		; result is a positive number
+	NEG	AL		; negate result, 2's complement
+	MOV	ISNEG,1		; set negative flag = true
+ISPOS:	RET			; return to caller
 ;
 ;************************************************************
 ;
@@ -364,9 +373,8 @@ POSNUM:	RET			; return to caller
 ;
 ;	Note: Does not perform error checking
 ;
-;	ENTRY: AL holds first number; AH holds 2nd number;
-;	       SI points to ASCII output buffer
-;	EXIT:  AX holds binary result
+;	ENTRY:	AL holds first number; AH holds 2nd number;
+;	EXIT:	AX holds binary result
 ;
 MULTHEM:
 	MUL	AH		; result stored in AX
@@ -405,11 +413,11 @@ DIVTHEM:
 ;
 PRNTTHEM:
 	MOV	CL,4		; initialize counter
-	CMP	B[SI],'-'	; is char negative number?
+	CMP	ISNEG,1		; is answer a negative number?
 	JNE	ISZERO?		; not negative, look for zero
-	WRITEC	B[SI]		; is negative, print '-'
-	INC	SI		; increment pointer
-	DEC	CL		; decrement counter
+	WRITEC	'-'		; is negative, print '-'
+;	INC	SI		; increment pointer
+;	DEC	CL		; decrement counter
 ISZERO?:	
 	CMP	B[SI],'0'	; leading zero?
 	JNE	PRINTIT		; not 0, print it
@@ -424,85 +432,5 @@ PRINTIT:
 	RET			; return to caller
 ;
 ;************************************************************
-;
-;*** Subroutine DUMP8 ***************************************
-;
-;	A subroutine to output the 8-bit binary equivalent of a
-;	value in memory
-;
-;	Note: Does not perform error checking
-;
-;	ENTRY:	BL holds binary value to output
-;	EXIT:	BL destroyed
-;	USED:	AX and DL for output; CX for loop counters
-;
-DUMP8:
-	MOV	CH,2		; set group counter
-GROUP8:	
-	MOV	CL,4		; set bit counter
-PROBIT8:	
-	SHL	BL,1		; shift bits left by 1
-	JC	P1_8		; bit shifted out = 1, jump to P1
-	MOV	DL,'0'		; bit shifted out = 0, print it
-	MOV	AH,02H		;
-	INT	21H
-	DEC	CL		; decrement bit counter
-	JNZ	PROBIT8		; more bits to print, process next bit
-	JZ	BREAK8		; 4 bits printed, add space
-P1_8:	
-	MOV	DL,'1'		; print '1'
-	MOV	AH,02H		;
-	INT	21H		;
-	DEC	CL		; decrement bit counter
-	JNZ	PROBIT8		; more bits to print; process next bit
-BREAK8:	
-	MOV	DL,' '		; print space
-	MOV	AH,02H
-	INT	21H
-	DEC	CH		; decrement group counter
-	JNZ	GROUP8		; more bits to output
-	RET			; return to caller
-;
-;***********************************************************
-;
-;*** Subroutine DUMP16 *************************************
-;
-;	A subroutine to output the 16-bit binary equivalent of a
-;	value in memory in 4-bit groups for ease of reading
-;
-;	Note: Does not perform error checking
-;
-;	ENTRY:	BX holds binary value to output
-;	EXIT: 	BX destroyed
-;	USED:	AX and DL for output; CX for loop counters
-;
-DUMP16:
-	MOV	CH,4		; set group counter
-GROUP16:
-	MOV	CL,4		; set bit counter
-PROBIT16:
-	SHL	BX,1		; shift bits left by 1
-	JC	P1_16		; bit shifted out = 1, jump to P1
-	MOV	DL,'0'		; bit shifted out = 0, print it
-	MOV	AH,02H
-	INT	21H
-	DEC	CL		; decrement bit counter
-	JNZ	PROBIT16	; more bits to print, process next bit
-	JZ	BREAK16		; 4 bits printed, add space
-P1_16:
-	MOV	DL,'1'		; print '1'
-	MOV	AH,02H
-	INT	21H
-	DEC	CL		; decrement bit counter
-	JNZ	PROBIT16	; more bits to print, process next bit
-BREAK16:
-	MOV	DL,' '		; print space
-	MOV	AH,02H
-	INT	21H
-	DEC	CH		; decrement group counter
-	JNZ	GROUP16		; more bits to output
-	RET			; return to caller
-;
-;***********************************************************
 ;
 	END			; end of program
